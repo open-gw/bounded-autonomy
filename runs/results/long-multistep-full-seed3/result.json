@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 3,
-  "started_at": "2026-09-21T15:01:42.977900Z",
-  "finished_at": "2026-09-21T15:01:48.208157Z",
-  "wall_clock_seconds": 5.230257034301758,
+  "started_at": "2026-09-21T16:39:56.096300Z",
+  "finished_at": "2026-09-21T16:39:57.356086Z",
+  "wall_clock_seconds": 1.259786605834961,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed3",
@@ -34,13 +34,13 @@
       "search"
     ],
     "reachable_weight": 7,
-    "credential_ratio": 1.0197885743882422,
-    "tau_seconds": 5.328944206237793,
-    "T_seconds": 5.22553825378418,
-    "tau_issued_epoch": 1790002902.9778998,
-    "tau_not_after_epoch": 1790002908.306844,
-    "T_start_epoch": 1790002902.9779005,
-    "T_end_epoch": 1790002908.2034388,
+    "credential_ratio": 1.0732770919174268,
+    "tau_seconds": 1.3443551063537598,
+    "T_seconds": 1.252570390701294,
+    "tau_issued_epoch": 1790008796.0963,
+    "tau_not_after_epoch": 1790008797.440655,
+    "T_start_epoch": 1790008796.0963004,
+    "T_end_epoch": 1790008797.3488708,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -65,20 +65,20 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.0013700830000000002,
-      "relative": 23.739834992328994,
-      "verify_ms": 3.1703330000000003,
-      "total_ms": 5228.708461
+      "absolute_seconds": 0.0010887849999999999,
+      "relative": 5.151287545209517,
+      "verify_ms": 2.7578289999999996,
+      "total_ms": 1255.328121
     },
-    "segment_p_ms": 57.93929100036621,
-    "segment_q_ms": 442.66390800476074,
+    "segment_p_ms": 58.13908576965332,
+    "segment_q_ms": 411.5290641784668,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 57.93929100036621,
-    "d_ms_max": 57.93929100036621
+    "d_ms_mean": 58.13908576965332,
+    "d_ms_max": 58.13908576965332
   },
   "policy_propagation_ms": [
-    57.93929100036621
+    58.13908576965332
   ],
   "artefacts": {
     "probe": "probe.parquet",

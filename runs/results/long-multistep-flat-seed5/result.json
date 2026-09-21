@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "flat",
   "seed": 5,
-  "started_at": "2026-09-21T14:59:08.658047Z",
-  "finished_at": "2026-09-21T14:59:08.870072Z",
-  "wall_clock_seconds": 0.21202540397644043,
+  "started_at": "2026-09-21T16:35:48.443969Z",
+  "finished_at": "2026-09-21T16:35:48.752025Z",
+  "wall_clock_seconds": 0.3080565929412842,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-flat-seed5",
@@ -39,13 +39,13 @@
       "search"
     ],
     "reachable_weight": 14,
-    "credential_ratio": 419546.9408168936,
+    "credential_ratio": 285583.13679133763,
     "tau_seconds": 86400.0,
-    "T_seconds": 0.20593643188476562,
-    "tau_issued_epoch": 1790002744.0,
-    "tau_not_after_epoch": 1790089144.0,
-    "T_start_epoch": 1790002748.6580472,
-    "T_end_epoch": 1790002748.8639836,
+    "T_seconds": 0.3025388717651367,
+    "tau_issued_epoch": 1790008545.0,
+    "tau_not_after_epoch": 1790094945.0,
+    "T_start_epoch": 1790008548.443969,
+    "T_end_epoch": 1790008548.746508,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -70,10 +70,10 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.0014469589999999998,
+      "absolute_seconds": 0.003535416,
       "relative": null,
-      "verify_ms": 1.4469589999999999,
-      "total_ms": 207.383251
+      "verify_ms": 3.535416,
+      "total_ms": 306.074166
     },
     "segment_p_ms": 0.0,
     "segment_q_ms": 0.0,

@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 4,
-  "started_at": "2026-09-21T15:03:32.714513Z",
-  "finished_at": "2026-09-21T15:03:38.069666Z",
-  "wall_clock_seconds": 5.355153560638428,
+  "started_at": "2026-09-21T16:41:40.662682Z",
+  "finished_at": "2026-09-21T16:41:41.850507Z",
+  "wall_clock_seconds": 1.1878249645233154,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed4",
@@ -34,13 +34,13 @@
       "search"
     ],
     "reachable_weight": 7,
-    "credential_ratio": 1.0193345429722132,
-    "tau_seconds": 5.4338061809539795,
-    "T_seconds": 5.33073878288269,
-    "tau_issued_epoch": 1790003012.7145128,
-    "tau_not_after_epoch": 1790003018.148319,
-    "T_start_epoch": 1790003012.7145133,
-    "T_end_epoch": 1790003018.045252,
+    "credential_ratio": 1.0306886944373133,
+    "tau_seconds": 1.221386194229126,
+    "T_seconds": 1.1850194931030273,
+    "tau_issued_epoch": 1790008900.6626818,
+    "tau_not_after_epoch": 1790008901.884068,
+    "T_start_epoch": 1790008900.662682,
+    "T_end_epoch": 1790008901.8477015,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -65,20 +65,20 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.0006517090000000005,
-      "relative": 26.007615171074537,
-      "verify_ms": 2.4664590000000004,
-      "total_ms": 5333.205003
+      "absolute_seconds": -0.001283588,
+      "relative": 2.2897523467937213,
+      "verify_ms": 1.297078,
+      "total_ms": 1186.316495
     },
-    "segment_p_ms": 66.2391185760498,
-    "segment_q_ms": 297.68872261047363,
+    "segment_p_ms": 59.677839279174805,
+    "segment_q_ms": 362.6668453216553,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 66.2391185760498,
-    "d_ms_max": 66.2391185760498
+    "d_ms_mean": 59.677839279174805,
+    "d_ms_max": 59.677839279174805
   },
   "policy_propagation_ms": [
-    66.2391185760498
+    59.677839279174805
   ],
   "artefacts": {
     "probe": "probe.parquet",

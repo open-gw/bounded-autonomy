@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 1,
-  "started_at": "2026-09-21T14:54:49.788686Z",
-  "finished_at": "2026-09-21T14:54:54.961349Z",
-  "wall_clock_seconds": 5.1726624965667725,
+  "started_at": "2026-09-21T16:36:26.873538Z",
+  "finished_at": "2026-09-21T16:36:28.056112Z",
+  "wall_clock_seconds": 1.1825735569000244,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed1",
@@ -34,13 +34,13 @@
       "search"
     ],
     "reachable_weight": 7,
-    "credential_ratio": 1.0088208058379358,
-    "tau_seconds": 5.2145068645477295,
-    "T_seconds": 5.168912887573242,
-    "tau_issued_epoch": 1790002489.7886863,
-    "tau_not_after_epoch": 1790002495.0031931,
-    "T_start_epoch": 1790002489.7886875,
-    "T_end_epoch": 1790002494.9576004,
+    "credential_ratio": 1.0492295484868204,
+    "tau_seconds": 1.237091064453125,
+    "T_seconds": 1.1790471076965332,
+    "tau_issued_epoch": 1790008586.873538,
+    "tau_not_after_epoch": 1790008588.110629,
+    "T_start_epoch": 1790008586.8735387,
+    "T_end_epoch": 1790008588.0525858,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -65,20 +65,20 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.00028229199999999974,
-      "relative": 15.849655930475945,
-      "verify_ms": 1.2431649999999999,
-      "total_ms": 5170.156126
+      "absolute_seconds": 0.0007483710000000002,
+      "relative": 0.08326148155307458,
+      "verify_ms": 2.1951229999999997,
+      "total_ms": 1181.2421239999999
     },
-    "segment_p_ms": 55.62901496887207,
-    "segment_q_ms": 373.4548091888428,
+    "segment_p_ms": 46.8752384185791,
+    "segment_q_ms": 351.1190414428711,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 55.62901496887207,
-    "d_ms_max": 55.62901496887207
+    "d_ms_mean": 46.8752384185791,
+    "d_ms_max": 46.8752384185791
   },
   "policy_propagation_ms": [
-    55.62901496887207
+    46.8752384185791
   ],
   "artefacts": {
     "probe": "probe.parquet",
