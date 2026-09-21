@@ -50,6 +50,19 @@ def render_cnp(
         }
         for svc in service_names
     ]
+    egress.append(
+        {
+            "toEndpoints": [
+                {
+                    "matchLabels": {
+                        "app.kubernetes.io/name": "otel-collector",
+                        "k8s:io.kubernetes.pod.namespace": "rig",
+                    }
+                }
+            ],
+            "toPorts": [{"ports": [{"port": "4318", "protocol": "TCP"}]}],
+        }
+    )
     # DNS (no Cilium DNS-proxy rules: those hijack 53 and blackhole if the
     # proxy is not ready). SPIRE uses a local agent socket, not this path.
     egress.append(

@@ -32,6 +32,9 @@ def _result(mode: str, seed: int) -> dict:
     total_ms = 3000.0 + seed * 50 if mode == "flat" else 3300.0 + seed * 50
     relative = None if mode == "flat" else (total_ms - (3000.0 + seed * 50)) / (3000.0 + seed * 50)
     reachable = ALL if mode == "flat" else list(DECLARED)
+    t0 = 1_747_440_000.0 + seed * 60
+    tau = 86_400.0 if mode == "flat" else wall
+    t1 = t0 + wall
     run_id = f"long-multistep-{mode}-seed{seed}"
     return {
         "schema_version": "1.0.0",
@@ -59,7 +62,14 @@ def _result(mode: str, seed: int) -> dict:
         "metrics": {
             "reachable_set_size": len(reachable),
             "reachable_services": reachable,
-            "credential_ratio": 1.0,
+            "reachable_weight": 14 if mode == "flat" else 7,
+            "credential_ratio": tau / wall,
+            "tau_seconds": tau,
+            "T_seconds": wall,
+            "tau_issued_epoch": t0,
+            "tau_not_after_epoch": t0 + tau,
+            "T_start_epoch": t0,
+            "T_end_epoch": t1,
             "rollback_completeness": {
                 "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
                 "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
@@ -73,6 +83,12 @@ def _result(mode: str, seed: int) -> dict:
                 "verify_ms": verify_ms,
                 "total_ms": total_ms,
             },
+            "segment_p_ms": 0.0 if mode == "flat" else 10.0 + seed,
+            "segment_q_ms": 0.0 if mode == "flat" else 5.0 + seed,
+            "step_ratio_mean": None,
+            "step_ratio_max": None,
+            "d_ms_mean": None if mode == "flat" else 10.0 + seed,
+            "d_ms_max": None if mode == "flat" else 12.0 + seed,
         },
         "policy_propagation_ms": [] if mode == "flat" else [10.0 + seed, 12.0 + seed],
         "source": "simulator",

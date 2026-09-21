@@ -14,12 +14,38 @@ from metrics import (
     rollback_completeness,
     verification_overhead,
 )
+try:
+    from weights import load_weights, reachable_weight as _rw
+except ImportError:
+    from rig.weights import load_weights, reachable_weight as _rw
 
 
 def _read(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
     return pd.read_parquet(path)
+
+
+def _epochs(svid: pd.DataFrame, spans: pd.DataFrame) -> dict[str, float | None]:
+    issued = not_after = t0 = t1 = None
+    if not svid.empty and "issued_at_epoch" in svid.columns:
+        issued = float(pd.to_numeric(svid["issued_at_epoch"], errors="coerce").max())
+        not_after = float(pd.to_numeric(svid["not_after_epoch"], errors="coerce").max())
+    if not spans.empty:
+        runs = spans[spans.get("name", pd.Series(dtype=str)) == "run"] if "name" in spans.columns else pd.DataFrame()
+        if not runs.empty and "start_epoch" in runs.columns:
+            t0 = float(pd.to_numeric(runs["start_epoch"], errors="coerce").min())
+            t1 = float(pd.to_numeric(runs["end_epoch"], errors="coerce").max())
+    tau = None if issued is None or not_after is None else not_after - issued
+    t_sec = None if t0 is None or t1 is None else t1 - t0
+    return {
+        "tau_seconds": tau,
+        "T_seconds": t_sec,
+        "tau_issued_epoch": issued,
+        "tau_not_after_epoch": not_after,
+        "T_start_epoch": t0,
+        "T_end_epoch": t1,
+    }
 
 
 def compute_result(
@@ -40,7 +66,6 @@ def compute_result(
     rho_enum = rb.pop("rho_enum")
     baseline = baseline_spans if baseline_spans is not None else pd.DataFrame()
     overhead = verification_overhead(spans, baseline)
-    # Drop helper keys not in the result schema.
     overhead_out = {
         "absolute_seconds": overhead["absolute_seconds"],
         "relative": overhead["relative"],
@@ -50,6 +75,12 @@ def compute_result(
     ratio = credential_ratio(svid, spans)
     if ratio != ratio:  # NaN
         ratio = None
+    epochs = _epochs(svid, spans)
+    step_ratios = [float(x) for x in (meta.get("step_ratios") or [])]
+    d_ms = [float(x) for x in (meta.get("policy_propagation_ms") or [])]
+    weight = meta.get("reachable_weight")
+    if weight is None:
+        weight = _rw(reached, load_weights())
 
     return {
         "schema_version": "1.0.0",
@@ -67,10 +98,23 @@ def compute_result(
         "metrics": {
             "reachable_set_size": len(reached),
             "reachable_services": reached,
+            "reachable_weight": int(weight),
             "credential_ratio": ratio,
+            "tau_seconds": epochs["tau_seconds"],
+            "T_seconds": epochs["T_seconds"],
+            "tau_issued_epoch": epochs["tau_issued_epoch"],
+            "tau_not_after_epoch": epochs["tau_not_after_epoch"],
+            "T_start_epoch": epochs["T_start_epoch"],
+            "T_end_epoch": epochs["T_end_epoch"],
             "rollback_completeness": rb,
             "rho_enum": rho_enum,
             "verification_overhead": overhead_out,
+            "segment_p_ms": meta.get("segment_p_ms"),
+            "segment_q_ms": meta.get("segment_q_ms"),
+            "step_ratio_mean": None if not step_ratios else sum(step_ratios) / len(step_ratios),
+            "step_ratio_max": None if not step_ratios else max(step_ratios),
+            "d_ms_mean": None if not d_ms else sum(d_ms) / len(d_ms),
+            "d_ms_max": None if not d_ms else max(d_ms),
         },
         "policy_propagation_ms": meta.get("policy_propagation_ms", []),
         "artefacts": {

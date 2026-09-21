@@ -13,6 +13,7 @@ PIP     ?= $(PYTHON) -m pip
 PROFILE ?= long-multistep
 MODE    ?= full
 SEED    ?= 1
+GRANULARITY ?= task
 MANIFEST ?=
 
 export PYTHONPATH := $(ROOT):$(ROOT)/analysis:$(ROOT)/rig:$(PYTHONPATH)
@@ -20,7 +21,7 @@ export PYTHONPATH := $(ROOT):$(ROOT)/analysis:$(ROOT)/rig:$(PYTHONPATH)
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*##"; printf "bounded-autonomy  Paper 1 rig\n\n"} \
 	     /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)\n"
+	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)  GRANULARITY=$(GRANULARITY)\n"
 
 tools: ## Install pinned k3d/kubectl/helm/cilium/hubble CLIs into .tools/
 	$(PYTHON) $(ROOT)/scripts/install_tools.py
@@ -47,8 +48,8 @@ up: ## k3d cluster delete+create, Cilium, standalone SPIRE, stores, observers
 down: ## k3d cluster delete (nothing else)
 	$(ROOT)/scripts/cluster_down.sh
 
-run: ## Execute one profile (PROFILE MODE SEED)
-	$(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED)
+run: ## Execute one profile (PROFILE MODE SEED GRANULARITY)
+	GRANULARITY=$(GRANULARITY) $(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED) --granularity $(GRANULARITY)
 
 stores-smoke: ## Write and read one object per store; confirm history/versioning
 	$(PYTHON) $(ROOT)/scripts/stores_smoke.py

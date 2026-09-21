@@ -26,3 +26,4 @@ spec:
   cluster:
     name: bounded-autonomy
     node_count: 1
+  granularity: task

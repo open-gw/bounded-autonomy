@@ -91,12 +91,12 @@ Eight services, sensitivity weights in `{1,2,3}`. Only the four MCP tool servers
 | Name | Sensitivity | Kind | Store / effect | Port |
 | --- | --- | --- | --- | --- |
 | `records` | 3 | MCP tool | Postgres 17 (temporal table) | 8081 |
-| `docs` | 2 | MCP tool | MinIO (versioned bucket) | 8082 |
+| `docs` | 3 | MCP tool | MinIO (versioned bucket) | 8082 |
 | `search` | 2 | MCP tool | Qdrant (single collection, snapshots) | 8083 |
-| `notify` | 3 | MCP tool | external-effect log (irreversible) | 8084 |
-| `billing` | 3 | placeholder | none | 8085 |
+| `notify` | 2 | MCP tool | external-effect log (irreversible) | 8084 |
+| `billing` | 1 | placeholder | none | 8085 |
 | `analytics` | 1 | placeholder | none | 8086 |
-| `audit` | 2 | placeholder | none | 8087 |
+| `audit` | 1 | placeholder | none | 8087 |
 | `catalog` | 1 | placeholder | none | 8088 |
 
 The agent never opens a connection to Postgres, MinIO, or Qdrant. Those ports are reachable only from their tool server.
@@ -143,9 +143,7 @@ On a clean `full` run with the Paper 1 declaration, `|S| = 3`. On `flat`, `|S| =
 - `svid_records`: columns `task_id`, `spiffe_id`, `issued_at`, `not_after`.
 - `spans`: columns `task_id`, `name`, … (OTel export).
 
-`credential_ratio = |{spiffe_id}| / |{task_id in spans}|`.
-
-One task, one SVID ⇒ `1.0`. Two sequential tasks on one pod must yield two SPIFFE IDs and ratio `1.0`. Division by zero returns `NaN`.
+`credential_ratio = τ / T`, with `τ = not_after_epoch - issued_at_epoch` from SPIRE or the projected ServiceAccount token, and `T = end_epoch - start_epoch` of the OTel root span named `run`. Flat uses a 24 h token so `τ/T ≫ 1`. Full records issue→revoke so `τ ≈ T`.
 
 ### 4.3 `rollback_completeness(lineage, groundtruth) -> dict`
 

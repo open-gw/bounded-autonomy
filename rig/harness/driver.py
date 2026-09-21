@@ -19,6 +19,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=("flat", "full"), required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument(
+        "--granularity",
+        choices=("task", "step"),
+        default=os.environ.get("GRANULARITY", "task"),
+    )
+    parser.add_argument(
         "--local",
         action="store_true",
         default=os.environ.get("BA_LOCAL", "") == "1",
@@ -32,7 +37,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.profile != "long-multistep":
         raise SystemExit(f"unsupported profile {args.profile}")
-    run_id = f"{args.profile}-{args.mode}-seed{args.seed}"
+    if args.granularity == "step":
+        run_id = f"{args.profile}-{args.mode}-step-seed{args.seed}"
+    else:
+        run_id = f"{args.profile}-{args.mode}-seed{args.seed}"
     out = args.out or (ROOT / "runs" / "results" / run_id)
 
     baseline = None
@@ -48,7 +56,13 @@ def main(argv: list[str] | None = None) -> int:
     if not use_local:
         from harness.cluster_driver import run_cluster
 
-        result = run_cluster(mode=args.mode, seed=args.seed, out_dir=out, baseline_spans=baseline)
+        result = run_cluster(
+            mode=args.mode,
+            seed=args.seed,
+            out_dir=out,
+            baseline_spans=baseline,
+            granularity=args.granularity,
+        )
     else:
         result = run_local(
             mode=args.mode,
@@ -56,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=out,
             injection=True,
             baseline_spans=baseline,
+            granularity=args.granularity,
+            task_id=run_id,
         )
     print(f"wrote {out / 'result.json'} reachable={result['metrics']['reachable_set_size']}")
     return 0

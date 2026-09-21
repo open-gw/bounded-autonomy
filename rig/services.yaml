@@ -9,7 +9,7 @@ services:
     store: postgres
     port: 8081
   - name: docs
-    sensitivity: 2
+    sensitivity: 3
     kind: mcp
     store: minio
     port: 8082
@@ -19,12 +19,12 @@ services:
     store: qdrant
     port: 8083
   - name: notify
-    sensitivity: 3
+    sensitivity: 2
     kind: mcp
     store: notify-log
     port: 8084
   - name: billing
-    sensitivity: 3
+    sensitivity: 1
     kind: placeholder
     store: null
     port: 8085
@@ -34,7 +34,7 @@ services:
     store: null
     port: 8086
   - name: audit
-    sensitivity: 2
+    sensitivity: 1
     kind: placeholder
     store: null
     port: 8087

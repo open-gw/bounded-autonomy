@@ -52,12 +52,13 @@ def test_cnp_allows_only_declared_services():
         labels = endpoints[0]["matchLabels"]
         if "app.kubernetes.io/name" in labels:
             dests.append(labels["app.kubernetes.io/name"])
-    assert dests == ["records", "search", "notify"]
+    assert dests[:3] == ["records", "search", "notify"]
+    assert "otel-collector" in dests
     ports = [
         rule["toPorts"][0]["ports"][0]["port"]
         for rule in egress["spec"]["egress"]
         if rule.get("toEndpoints")
-        and "app.kubernetes.io/name" in rule["toEndpoints"][0]["matchLabels"]
+        and rule["toEndpoints"][0]["matchLabels"].get("app.kubernetes.io/name") in {"records", "search", "notify"}
     ]
     assert ports == ["8081", "8083", "8084"]
     assert len(rendered["ingress"]) == 3

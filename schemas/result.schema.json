@@ -84,10 +84,23 @@
       "required": [
         "reachable_set_size",
         "reachable_services",
+        "reachable_weight",
         "credential_ratio",
+        "tau_seconds",
+        "T_seconds",
+        "tau_issued_epoch",
+        "tau_not_after_epoch",
+        "T_start_epoch",
+        "T_end_epoch",
         "rollback_completeness",
         "rho_enum",
-        "verification_overhead"
+        "verification_overhead",
+        "segment_p_ms",
+        "segment_q_ms",
+        "step_ratio_mean",
+        "step_ratio_max",
+        "d_ms_mean",
+        "d_ms_max"
       ],
       "properties": {
         "reachable_set_size": { "type": "integer", "minimum": 0 },
@@ -95,7 +108,14 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "reachable_weight": { "type": "integer", "minimum": 0 },
         "credential_ratio": { "type": ["number", "null"] },
+        "tau_seconds": { "type": ["number", "null"] },
+        "T_seconds": { "type": ["number", "null"] },
+        "tau_issued_epoch": { "type": ["number", "null"] },
+        "tau_not_after_epoch": { "type": ["number", "null"] },
+        "T_start_epoch": { "type": ["number", "null"] },
+        "T_end_epoch": { "type": ["number", "null"] },
         "rollback_completeness": {
           "type": "object",
           "additionalProperties": false,
@@ -118,7 +138,13 @@
             "verify_ms": { "type": "number", "minimum": 0 },
             "total_ms": { "type": "number", "minimum": 0 }
           }
-        }
+        },
+        "segment_p_ms": { "type": ["number", "null"] },
+        "segment_q_ms": { "type": ["number", "null"] },
+        "step_ratio_mean": { "type": ["number", "null"] },
+        "step_ratio_max": { "type": ["number", "null"] },
+        "d_ms_mean": { "type": ["number", "null"] },
+        "d_ms_max": { "type": ["number", "null"] }
       }
     },
     "policy_propagation_ms": {

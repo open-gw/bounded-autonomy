@@ -49,9 +49,11 @@ def run_local(
     injection: bool = True,
     lineage_disabled_for: str | None = None,
     baseline_spans: pd.DataFrame | None = None,
+    granularity: str = "task",
+    task_id: str | None = None,
 ) -> dict[str, Any]:
     started = datetime.now(timezone.utc)
-    task_id = _task_id(seed, mode)
+    task_id = task_id or _task_id(seed, mode)
     spiffe = _spiffe(task_id)
     plan = build_step_plan(seed)
     declared = ["records", "search", "notify"]
@@ -141,7 +143,7 @@ def run_local(
             probe(step.index)
             continue
 
-        verify_ms = 12 if mode == "full" else 2
+        verify_ms = (12 if mode == "full" else 2) + (step.index % 7) * 0.13
         span_rows.append(
             {
                 "name": "verify",
@@ -149,6 +151,7 @@ def run_local(
                 "mode": mode,
                 "task_id": task_id,
                 "audience_ok": True,
+                "export": "simulator",
             }
         )
         span_rows.append(
@@ -213,12 +216,31 @@ def run_local(
         row["attestation_action"] = att.get("action")
         row["restored_matches_before"] = att.get("matches_before")
 
+    finished = datetime.now(timezone.utc)
+    t_start = started.timestamp()
+    t_end = finished.timestamp()
+    tau_issued = t_start
+    tau_not_after = t_start + 86400.0 if mode == "flat" else t_end
+    span_rows.append(
+        {
+            "name": "run",
+            "duration_ms": (t_end - t_start) * 1000.0,
+            "mode": mode,
+            "task_id": task_id,
+            "start_epoch": t_start,
+            "end_epoch": t_end,
+            "export": "simulator",
+        }
+    )
     svid_rows = [
         {
             "task_id": task_id,
             "spiffe_id": spiffe,
             "issued_at": started.isoformat(),
-            "not_after": started.isoformat(),
+            "not_after": datetime.fromtimestamp(tau_not_after, timezone.utc).isoformat(),
+            "issued_at_epoch": tau_issued,
+            "not_after_epoch": tau_not_after,
+            "credential_kind": "sa-token" if mode == "flat" else "svid",
         }
     ]
 
@@ -255,12 +277,16 @@ def run_local(
                 "spiffe_id": spiffe,
                 "services": declared,
                 "expected_duration_seconds": 1800,
-                "granularity": "task",
+                "granularity": granularity,
             },
             "steps_completed": steps_completed,
             "write_counts": write_counts,
             "policy_propagation_ms": [] if mode == "flat" else [11.0 + seed],
             "source": "simulator",
+            "segment_p_ms": 0.0 if mode == "flat" else 11.0 + seed,
+            "segment_q_ms": 0.0 if mode == "flat" else 4.0 + seed,
+            "step_ratios": [],
+            "reachable_weight": None,
         },
         baseline_spans=baseline_spans,
     )

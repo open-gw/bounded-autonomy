@@ -32,7 +32,14 @@
       "search",
       "notify"
     ],
+    "reachable_weight": 7,
     "credential_ratio": 1.0,
+    "tau_seconds": 261.0,
+    "T_seconds": 261.0,
+    "tau_issued_epoch": 1747440060.0,
+    "tau_not_after_epoch": 1747440321.0,
+    "T_start_epoch": 1747440060.0,
+    "T_end_epoch": 1747440321.0,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -61,7 +68,13 @@
       "relative": 0.09836065573770492,
       "verify_ms": 164.0,
       "total_ms": 3350.0
-    }
+    },
+    "segment_p_ms": 11.0,
+    "segment_q_ms": 6.0,
+    "step_ratio_mean": null,
+    "step_ratio_max": null,
+    "d_ms_mean": 11.0,
+    "d_ms_max": 13.0
   },
   "policy_propagation_ms": [
     11.0,

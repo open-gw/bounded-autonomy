@@ -6,16 +6,30 @@ metadata:
     bounded-autonomy.io/part-of: paper1
     pod-security.kubernetes.io/enforce: privileged
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: rig
+---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: default-deny
   namespace: rig
 spec:
-  description: default-deny agent datapath; segments add allow-lists
+  description: default-deny agent datapath except DNS; segments add allow-lists
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: agent
-  enableDefaultDeny:
-    ingress: true
-    egress: true
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s:k8s-app: kube-dns
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP

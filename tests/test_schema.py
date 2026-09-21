@@ -22,7 +22,7 @@ def _load_yaml(name: str) -> dict:
 
 
 def test_example_manifests_validate():
-    for name in ("long-multistep-flat.yaml", "long-multistep-full.yaml"):
+    for name in ("long-multistep-flat.yaml", "long-multistep-full.yaml", "long-multistep-full-step.yaml"):
         errors = validate_manifest(MANIFESTS / name)
         assert errors == [], errors
 
@@ -102,7 +102,14 @@ def _result_template() -> dict:
         "metrics": {
             "reachable_set_size": 3,
             "reachable_services": ["notify", "records", "search"],
+            "reachable_weight": 7,
             "credential_ratio": 1.0,
+            "tau_seconds": 12.0,
+            "T_seconds": 12.0,
+            "tau_issued_epoch": 1000.0,
+            "tau_not_after_epoch": 1012.0,
+            "T_start_epoch": 1000.0,
+            "T_end_epoch": 1012.0,
             "rollback_completeness": {
                 "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
                 "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
@@ -116,6 +123,12 @@ def _result_template() -> dict:
                 "verify_ms": 180.0,
                 "total_ms": 4200.0,
             },
+            "segment_p_ms": 12.0,
+            "segment_q_ms": 4.0,
+            "step_ratio_mean": None,
+            "step_ratio_max": None,
+            "d_ms_mean": 12.0,
+            "d_ms_max": 18.0,
         },
         "policy_propagation_ms": [12.0, 18.0],
         "artefacts": {

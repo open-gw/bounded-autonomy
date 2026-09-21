@@ -1,14 +1,15 @@
 apiVersion: bounded-autonomy.io/v1
 kind: RunManifest
 metadata:
-  run_id: long-multistep-flat-seed1
+  run_id: long-multistep-full-step-seed1
   created: "2026-09-21T12:00:00Z"
 spec:
   profile: long-multistep
-  mode: flat
+  mode: full
   seed: 1
   steps: 30
   expected_duration_seconds: 1800
+  granularity: step
   write_mix:
     idempotent: 0.4
     versioned: 0.3
@@ -26,4 +27,3 @@ spec:
   cluster:
     name: bounded-autonomy
     node_count: 1
-  granularity: task

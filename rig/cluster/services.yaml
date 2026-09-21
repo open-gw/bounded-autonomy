@@ -27,6 +27,8 @@ spec:
           env:
             - name: TOOL_NAME
               value: records
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4318
             - name: STORE_DSN
               value: postgresql://rig:rig@postgres:5432/rig
           ports:
@@ -68,7 +70,7 @@ spec:
         app.kubernetes.io/name: docs
         app.kubernetes.io/part-of: bounded-autonomy
       annotations:
-        bounded-autonomy.io/sensitivity: "2"
+        bounded-autonomy.io/sensitivity: "3"
     spec:
       containers:
         - name: tool
@@ -77,6 +79,8 @@ spec:
           env:
             - name: TOOL_NAME
               value: docs
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4318
             - name: MINIO_ENDPOINT
               value: minio:9000
           ports:
@@ -127,6 +131,8 @@ spec:
           env:
             - name: TOOL_NAME
               value: search
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4318
             - name: QDRANT_URL
               value: http://qdrant:6333
           ports:
@@ -168,7 +174,7 @@ spec:
         app.kubernetes.io/name: notify
         app.kubernetes.io/part-of: bounded-autonomy
       annotations:
-        bounded-autonomy.io/sensitivity: "3"
+        bounded-autonomy.io/sensitivity: "2"
     spec:
       containers:
         - name: tool
@@ -177,6 +183,8 @@ spec:
           env:
             - name: TOOL_NAME
               value: notify
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4318
             - name: NOTIFY_LOG
               value: /var/log/notify.jsonl
           ports:
@@ -218,7 +226,7 @@ spec:
         app.kubernetes.io/name: billing
         app.kubernetes.io/part-of: bounded-autonomy
       annotations:
-        bounded-autonomy.io/sensitivity: "3"
+        bounded-autonomy.io/sensitivity: "1"
     spec:
       containers:
         - name: placeholder
@@ -306,7 +314,7 @@ spec:
         app.kubernetes.io/name: audit
         app.kubernetes.io/part-of: bounded-autonomy
       annotations:
-        bounded-autonomy.io/sensitivity: "2"
+        bounded-autonomy.io/sensitivity: "1"
     spec:
       containers:
         - name: placeholder

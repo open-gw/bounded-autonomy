@@ -37,7 +37,14 @@
       "audit",
       "catalog"
     ],
-    "credential_ratio": 1.0,
+    "reachable_weight": 14,
+    "credential_ratio": 355.55555555555554,
+    "tau_seconds": 86400.0,
+    "T_seconds": 243.0,
+    "tau_issued_epoch": 1747440060.0,
+    "tau_not_after_epoch": 1747526460.0,
+    "T_start_epoch": 1747440060.0,
+    "T_end_epoch": 1747440303.0,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -66,7 +73,13 @@
       "relative": 0.0,
       "verify_ms": 42.0,
       "total_ms": 3050.0
-    }
+    },
+    "segment_p_ms": 0.0,
+    "segment_q_ms": 0.0,
+    "step_ratio_mean": null,
+    "step_ratio_max": null,
+    "d_ms_mean": null,
+    "d_ms_max": null
   },
   "policy_propagation_ms": [],
   "source": "simulator",

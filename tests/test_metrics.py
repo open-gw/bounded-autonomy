@@ -12,6 +12,7 @@ from metrics import (
     reachable_set,
     rollback_completeness,
     verification_overhead,
+    verify_duration_variance,
 )
 
 
@@ -61,31 +62,29 @@ def test_reachable_set_flat_all_eight():
     assert len(reachable_set([], probe)) == 8
 
 
-def test_credential_ratio_one_svid_per_task():
+def test_credential_ratio_lifetime_over_task():
     svid = pd.DataFrame(
         [
             {
                 "task_id": "t1",
                 "spiffe_id": "spiffe://rig/task/t1",
-                "issued_at": "2026-01-01T00:00:00Z",
-                "not_after": "2026-01-01T00:30:00Z",
-            },
-            {
-                "task_id": "t2",
-                "spiffe_id": "spiffe://rig/task/t2",
-                "issued_at": "2026-01-01T00:31:00Z",
-                "not_after": "2026-01-01T01:00:00Z",
-            },
+                "issued_at_epoch": 1_000.0,
+                "not_after_epoch": 1_000.0 + 86_400.0,
+            }
         ]
     )
     spans = pd.DataFrame(
         [
-            {"task_id": "t1", "name": "orchestrator.step"},
-            {"task_id": "t1", "name": "verify"},
-            {"task_id": "t2", "name": "orchestrator.step"},
+            {
+                "task_id": "t1",
+                "name": "run",
+                "start_epoch": 1_000.0,
+                "end_epoch": 1_010.0,
+                "duration_ms": 10_000.0,
+            }
         ]
     )
-    assert credential_ratio(svid, spans) == 1.0
+    assert credential_ratio(svid, spans) == pytest.approx(86400.0 / 10.0)
 
 
 def test_credential_ratio_nan_without_tasks():
@@ -169,3 +168,14 @@ def test_verification_overhead_relative_to_baseline():
     assert got["verify_ms"] == 40
     assert got["absolute_seconds"] == pytest.approx(0.03)
     assert got["relative"] == pytest.approx(0.4)  # (140-100)/100
+
+
+def test_verify_duration_variance_detects_constants():
+    constant = pd.DataFrame(
+        [{"name": "verify", "duration_ms": 2.0} for _ in range(10)]
+    )
+    varied = pd.DataFrame(
+        [{"name": "verify", "duration_ms": float(i)} for i in range(10)]
+    )
+    assert verify_duration_variance(constant) == 1
+    assert verify_duration_variance(varied) == 10
