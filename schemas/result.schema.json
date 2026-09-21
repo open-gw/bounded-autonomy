@@ -19,7 +19,8 @@
     "write_counts",
     "metrics",
     "policy_propagation_ms",
-    "artefacts"
+    "artefacts",
+    "source"
   ],
   "properties": {
     "schema_version": { "const": "1.0.0" },
@@ -30,6 +31,7 @@
     "profile": { "const": "long-multistep" },
     "mode": { "enum": ["flat", "full"] },
     "seed": { "type": "integer", "minimum": 0 },
+    "source": { "enum": ["simulator", "cluster"] },
     "started_at": { "type": "string", "format": "date-time" },
     "finished_at": { "type": "string", "format": "date-time" },
     "wall_clock_seconds": { "type": "number", "minimum": 0 },

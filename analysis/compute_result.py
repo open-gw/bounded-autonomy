@@ -60,6 +60,7 @@ def compute_result(
         "started_at": meta["started_at"],
         "finished_at": meta["finished_at"],
         "wall_clock_seconds": meta["wall_clock_seconds"],
+        "source": meta.get("source", "simulator"),
         "declaration": meta["declaration"],
         "steps_completed": meta["steps_completed"],
         "write_counts": meta["write_counts"],

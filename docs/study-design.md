@@ -72,7 +72,7 @@ The orchestrator emits the `TaskDeclaration` from the step plan before step 1.
 | Mode | Segment controller | Audience check | Expected `\|reachable_set\|` on a clean run |
 | --- | --- | --- | --- |
 | `flat` | idle (no CNP from declarations) | `verify` span still recorded, check is a no-op | 8 |
-| `full` | CNP per declaration, default-deny in the workload namespace | `verify` span performs SVID audience check and filters undeclared destinations | 3 |
+| `full` | CNP per declaration (agent egress + ingress to declared services from the task-id label); default-deny on the agent pod | `verify` span performs SVID audience check and filters undeclared destinations | 3 |
 
 Both modes emit the same six artefacts so the four metric functions are total.
 
@@ -193,6 +193,7 @@ Written by the run driver after the six artefacts. Validates against `schemas/re
   "profile": "long-multistep",
   "mode": "flat" | "full",
   "seed": 0,
+  "source": "simulator" | "cluster",
   "started_at": RFC3339,
   "finished_at": RFC3339,
   "wall_clock_seconds": number >= 0,
@@ -240,7 +241,7 @@ Written by the run driver after the six artefacts. Validates against `schemas/re
 }
 ```
 
-Ten of these files (seeds 1–5 × `{flat,full}`) are the Paper 1 dataset. `make analyse` reads them and emits the three manuscript tables (reach, rollback, overhead) plus the Q2 figures.
+Ten of these files (seeds 1–5 × `{flat,full}`) with `source=cluster` are the Paper 1 dataset. `make analyse` reads them and emits the three manuscript tables (reach, rollback, overhead) plus the Q2 figures. It refuses if any input is `source=simulator`.
 
 ---
 

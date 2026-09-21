@@ -260,6 +260,7 @@ def run_local(
             "steps_completed": steps_completed,
             "write_counts": write_counts,
             "policy_propagation_ms": [] if mode == "flat" else [11.0 + seed],
+            "source": "simulator",
         },
         baseline_spans=baseline_spans,
     )

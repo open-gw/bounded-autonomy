@@ -75,6 +75,7 @@ def _result(mode: str, seed: int) -> dict:
             },
         },
         "policy_propagation_ms": [] if mode == "flat" else [10.0 + seed, 12.0 + seed],
+        "source": "simulator",
         "artefacts": {
             "probe": "probe.parquet",
             "flows": "flows.parquet",

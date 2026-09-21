@@ -69,6 +69,7 @@
     }
   },
   "policy_propagation_ms": [],
+  "source": "simulator",
   "artefacts": {
     "probe": "probe.parquet",
     "flows": "flows.parquet",

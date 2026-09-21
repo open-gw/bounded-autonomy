@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tables import emit_markdown, load_results, table_overhead, table_reach, table_rollback
+from tables import (
+    ProvenanceError,
+    assert_cluster_provenance,
+    emit_markdown,
+    load_results,
+    main as analyse_main,
+    source_caption,
+    table_overhead,
+    table_reach,
+    table_rollback,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "analysis" / "fixtures" / "results"
@@ -24,3 +34,20 @@ def test_tables_on_synthetic_fixtures(tmp_path, monkeypatch):
     assert "verify_ms" in overhead
     md = emit_markdown(results)
     assert "## Reach" in md and "## Rollback" in md and "## Overhead" in md
+    assert "source=simulator" in md
+
+
+def test_analyse_refuses_simulator_fixtures(tmp_path):
+    from build_fixtures import main as build
+
+    build()
+    rc = analyse_main(["--results", str(FIXTURES), "--out", str(tmp_path)])
+    assert rc == 1
+    results = load_results(FIXTURES)
+    try:
+        assert_cluster_provenance(results)
+        raise AssertionError("expected ProvenanceError")
+    except ProvenanceError as exc:
+        assert "source=cluster" in str(exc)
+        assert "simulator" in str(exc)
+    assert "source=simulator" in source_caption(results, "Reach")

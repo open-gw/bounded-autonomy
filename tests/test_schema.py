@@ -81,6 +81,7 @@ def _result_template() -> dict:
         "profile": "long-multistep",
         "mode": "full",
         "seed": 1,
+        "source": "simulator",
         "started_at": "2026-09-21T12:00:00Z",
         "finished_at": "2026-09-21T12:05:00Z",
         "wall_clock_seconds": 300.0,

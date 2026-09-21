@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -27,10 +28,41 @@ def load_results(results_dir: Path) -> list[dict[str, Any]]:
     paths = sorted(results_dir.glob("**/result.json"))
     out: list[dict[str, Any]] = []
     for path in paths:
-        out.append(json.loads(path.read_text()))
+        doc = json.loads(path.read_text())
+        doc["_path"] = str(path)
+        out.append(doc)
     if not out:
         raise FileNotFoundError(f"no result.json under {results_dir}")
     return out
+
+
+class ProvenanceError(Exception):
+    """Manuscript tables requested from non-cluster results."""
+
+
+def assert_cluster_provenance(results: list[dict[str, Any]]) -> None:
+    """Refuse manuscript tables unless every result is from the cluster."""
+    bad: list[str] = []
+    for row in results:
+        source = row.get("source")
+        path = row.get("_path", row.get("run_id", "?"))
+        if source != "cluster":
+            bad.append(f"{path}: source={source!r}")
+    if not bad:
+        return
+    lines = [
+        "refusing manuscript tables: every result.json must have source=cluster",
+        "non-cluster inputs:",
+        *[f"  - {item}" for item in bad],
+        "simulator/fixture numbers must not be pasted into the manuscript",
+    ]
+    raise ProvenanceError("\n".join(lines))
+
+
+def source_caption(results: list[dict[str, Any]], table_name: str) -> str:
+    sources = sorted({str(r.get("source", "unknown")) for r in results})
+    n = len(results)
+    return f"*Caption: {table_name}. source={'+'.join(sources)} (n={n}).*"
 
 
 def _by_mode(results: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -131,19 +163,29 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
     parts = [
         "# Manuscript tables",
         "",
+        source_caption(results, "all tables"),
+        "",
         "## Reach",
+        "",
+        source_caption(results, "Reach"),
         "",
         table_reach(results),
         "",
         "## Rollback",
         "",
+        source_caption(results, "Rollback"),
+        "",
         table_rollback(results),
         "",
         "## Overhead",
         "",
+        source_caption(results, "Overhead"),
+        "",
         table_overhead(results),
         "",
         "## Q2 series",
+        "",
+        source_caption(results, "Q2"),
         "",
         "| seed | mode | \\|S\\| | declared | extra |",
         "| ---: | --- | ---: | ---: | ---: |",
@@ -181,6 +223,13 @@ def write_q2_figure(results: list[dict[str, Any]], out_dir: Path) -> Path | None
     ax.legend()
     ax.set_ylim(0, 9)
     fig.tight_layout()
+    fig.text(
+        0.5,
+        0.01,
+        source_caption(results, "Q2 reachable-set figure").strip("*"),
+        ha="center",
+        fontsize=8,
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "q2-reachable-set.png"
     fig.savefig(path, dpi=120)
@@ -193,10 +242,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--out", type=Path, default=ROOT / "analysis" / "output")
     args = parser.parse_args(argv)
-    results_dir = args.results
-    if not list(results_dir.glob("**/result.json")):
-        results_dir = FIXTURE_RESULTS
-    results = load_results(results_dir)
+    results = load_results(args.results)
+    try:
+        assert_cluster_provenance(results)
+    except ProvenanceError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     args.out.mkdir(parents=True, exist_ok=True)
     markdown = emit_markdown(results)
     (args.out / "tables.md").write_text(markdown)

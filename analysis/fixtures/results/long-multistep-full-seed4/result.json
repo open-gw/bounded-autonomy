@@ -67,6 +67,7 @@
     14.0,
     16.0
   ],
+  "source": "simulator",
   "artefacts": {
     "probe": "probe.parquet",
     "flows": "flows.parquet",
