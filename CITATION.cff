@@ -1,0 +1,35 @@
+# Citation File Format 1.2.0 — Paper 1 / bounded-autonomy artefact.
+# Cite this repository until an arXiv DOI exists (README).
+cff-version: 1.2.0
+message: If you use this Paper 1 artefact, please cite it using these metadata.
+type: software
+title: "bounded-autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
+abstract: >-
+  One-node k3d measurement rig for Paper 1 of Containing and Unwinding the
+  Blast Radius of Agentic Workflows (ICSA artefact). One profile
+  (long-multistep), two modes (flat, full), five seeds, four metric exporters.
+  Nothing from Paper 2 is in this repository.
+authors:
+  - family-names: Dhanaraj
+    given-names: Rinu
+repository-code: "https://github.com/open-gw/bounded-autonomy"
+url: "https://github.com/open-gw/bounded-autonomy"
+license: MIT
+keywords:
+  - bounded-autonomy
+  - agentic-workflows
+  - blast-radius
+  - cilium
+  - spiffe
+  - icsa-artefact
+version: "1.0.0"
+date-released: "2026-09-21"
+preferred-citation:
+  type: software
+  title: "bounded-autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
+  authors:
+    - family-names: Dhanaraj
+      given-names: Rinu
+  year: 2026
+  url: "https://github.com/open-gw/bounded-autonomy"
+  notes: ICSA Paper 1 artefact; DOI pending arXiv posting.

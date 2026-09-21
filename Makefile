@@ -4,7 +4,7 @@
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-.PHONY: help tools test validate up down run analyse stores-smoke clean \
+.PHONY: help tools test validate up down run analyse paper-tables stores-smoke clean \
 	notebook fixtures
 
 ROOT    := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -41,6 +41,9 @@ notebook: fixtures ## Run the pre-registered notebook on synthetic fixtures
 
 analyse: ## Manuscript tables; exits 1 unless every result.json has source=cluster
 	$(PYTHON) $(ROOT)/analysis/tables.py --results $(ROOT)/runs/results --out $(ROOT)/analysis/output
+
+paper-tables: ## LaTeX-ready rows; same cluster / variance / span-count gate as analyse
+	$(PYTHON) $(ROOT)/analysis/tables.py --results $(ROOT)/runs/results --out $(ROOT)/analysis/output --format latex
 
 up: ## k3d cluster delete+create, Cilium, standalone SPIRE, stores, observers
 	$(ROOT)/scripts/cluster_up.sh

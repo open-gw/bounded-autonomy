@@ -5,6 +5,7 @@ from pathlib import Path
 from tables import (
     ProvenanceError,
     assert_cluster_provenance,
+    emit_latex,
     emit_markdown,
     load_results,
     main as analyse_main,
@@ -123,3 +124,76 @@ def test_analyse_refuses_zero_variance_verify_spans(tmp_path):
         raise AssertionError("expected ProvenanceError")
     except ProvenanceError as exc:
         assert "zero variance" in str(exc)
+
+
+def test_emit_latex_on_synthetic_fixtures():
+    from build_fixtures import main as build
+
+    build()
+    results = load_results(FIXTURES)
+    tex = emit_latex(results)
+    assert r"\begin{tabular}" in tex
+    assert r"mean $|S|$" in tex
+    assert "8.000" in tex and "3.000" in tex
+    assert "idempotent" in tex and "1.000" in tex
+    assert r"\textemdash{}" in tex
+    assert "source=simulator" in tex
+    md = emit_markdown(results)
+    assert "8.000" in table_reach(results)
+    assert "3.000" in md
+
+
+def test_paper_tables_refuses_simulator_fixtures(tmp_path):
+    from build_fixtures import main as build
+
+    build()
+    rc = analyse_main(
+        ["--results", str(FIXTURES), "--out", str(tmp_path), "--format", "latex"]
+    )
+    assert rc == 1
+    assert not (tmp_path / "tables.tex").exists()
+
+
+def test_paper_tables_refuses_leftover_verify_spans(tmp_path):
+    _cluster_run(tmp_path, "leftover-run", "full", 58)
+    rc = analyse_main(
+        ["--results", str(tmp_path), "--out", str(tmp_path / "out"), "--format", "latex"]
+    )
+    assert rc == 1
+    assert not (tmp_path / "out" / "tables.tex").exists()
+
+
+def test_paper_tables_writes_tex_on_cluster_results(tmp_path):
+    import json
+
+    for name, mode, n_verify in (("full-run", "full", 29), ("flat-run", "flat", 30)):
+        run_dir = _cluster_run(tmp_path / mode, name, mode, n_verify)
+        doc = json.loads((run_dir / "result.json").read_text())
+        size = 3 if mode == "full" else 8
+        doc["metrics"] = {
+            "reachable_set_size": size,
+            "reachable_weight": 7 if mode == "full" else 14,
+            "tau_seconds": 1.0,
+            "T_seconds": 1.0,
+            "credential_ratio": 1.0,
+            "segment_p_ms": 0.0,
+            "segment_q_ms": 0.0,
+            "d_ms_mean": 1.0,
+            "d_ms_max": 1.0,
+            "rollback_completeness": {
+                "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
+                "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
+                "derived": {"rho_rev": None, "n": 6, "quarantined": 6},
+                "irreversible": {"rho_rev": 0.0, "n": 3, "escalated": 3},
+            },
+            "verification_overhead": {"verify_ms": 2.0, "total_ms": 100.0, "relative": 0.0},
+        }
+        (run_dir / "result.json").write_text(json.dumps(doc))
+    rc = analyse_main(
+        ["--results", str(tmp_path), "--out", str(tmp_path / "out"), "--format", "latex"]
+    )
+    assert rc == 0
+    tex = (tmp_path / "out" / "tables.tex").read_text()
+    assert r"\begin{tabular}" in tex
+    assert "% --- Reach ---" in tex
+    assert "source=cluster" in tex

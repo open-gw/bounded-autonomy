@@ -4,7 +4,7 @@ Containing and Unwinding the Blast Radius of Agentic Workflows — Paper 1 artef
 
 One-node k3d rig. One profile (`long-multistep`). Two modes (`flat`, `full`). Five seeds. Four metric exporters. Nothing from Paper 2 is in this repository.
 
-Citation will be added when the arXiv DOI exists. Until then, cite this repository.
+Cite this repository via [`CITATION.cff`](CITATION.cff) until an arXiv DOI exists. Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md).
 
 ## What a run measures
 
@@ -51,6 +51,7 @@ for mode in flat full; do
   done
 done
 make analyse       # exits 1 unless every result.json has source=cluster
+make paper-tables  # LaTeX rows; same provenance gate
 make down
 ```
 
@@ -68,6 +69,8 @@ rig/            cluster, controller, identity, stores, harness, …
 runs/manifests  one YAML per planned run
 runs/results    gitignored except result.json
 analysis/       metrics.py, pre-registered notebook
+CITATION.cff    Paper 1 citation
+ARTIFACT.md     manuscript table/figure → command and files
 ```
 
 ## Licence

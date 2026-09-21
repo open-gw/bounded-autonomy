@@ -1,6 +1,6 @@
 """Emit the three manuscript tables from result.json files.
 
-Used by `make analyse` and by analysis/notebook.ipynb.
+Used by `make analyse`, `make paper-tables`, and analysis/notebook.ipynb.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(_mpl))
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS = ROOT / "runs" / "results"
 FIXTURE_RESULTS = ROOT / "analysis" / "fixtures" / "results"
+_EMDASH = "\u2014"
 
 
 def load_results(results_dir: Path) -> list[dict[str, Any]]:
@@ -146,32 +147,76 @@ def _mean(xs: list[float]) -> float:
     return statistics.fmean(xs) if xs else float("nan")
 
 
-def table_reach(results: list[dict[str, Any]]) -> str:
-    results = _task_results(results)
-    lines = [
-        "| mode | n | mean \\|S\\| | min | max | mean extra | mean R_w |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
-    for mode, rows in sorted(_by_mode(results).items()):
-        sizes = [int(r["metrics"]["reachable_set_size"]) for r in rows]
-        declared_n = [len(r["declaration"]["services"]) for r in rows]
-        extra = [s - d for s, d in zip(sizes, declared_n)]
-        weights = [int(r["metrics"].get("reachable_weight") or 0) for r in rows]
-        lines.append(
-            f"| {mode} | {len(rows)} | {_mean(sizes):.3f} | {min(sizes)} | {max(sizes)} | {_mean(extra):.3f} | {_mean(weights):.3f} |"
-        )
+def _latex_cell(value: str) -> str:
+    if value == _EMDASH:
+        return r"\textemdash{}"
+    return value
+
+
+def _md_lines(header: str, align: str, rows: list[tuple[str, ...]]) -> str:
+    lines = [header, align]
+    for row in rows:
+        lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
 
 
-def table_rollback(results: list[dict[str, Any]]) -> str:
+def _tex_tabular(
+    results: list[dict[str, Any]],
+    name: str,
+    colspec: str,
+    header: str,
+    rows: list[tuple[str, ...]],
+) -> str:
+    comment = source_caption(results, name).strip("*")
+    lines = [
+        f"% --- {name} ---",
+        f"% {comment}",
+        rf"\begin{{tabular}}{{{colspec}}}",
+        header + r" \\",
+        r"\hline",
+    ]
+    for row in rows:
+        lines.append(" & ".join(_latex_cell(c) for c in row) + r" \\")
+    lines.append(r"\end{tabular}")
+    return "\n".join(lines)
+
+
+def _reach_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    results = _task_results(results)
+    rows: list[tuple[str, ...]] = []
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        sizes = [int(r["metrics"]["reachable_set_size"]) for r in mode_rows]
+        declared_n = [len(r["declaration"]["services"]) for r in mode_rows]
+        extra = [s - d for s, d in zip(sizes, declared_n)]
+        weights = [int(r["metrics"].get("reachable_weight") or 0) for r in mode_rows]
+        rows.append(
+            (
+                mode,
+                str(len(mode_rows)),
+                f"{_mean(sizes):.3f}",
+                str(min(sizes)),
+                str(max(sizes)),
+                f"{_mean(extra):.3f}",
+                f"{_mean(weights):.3f}",
+            )
+        )
+    return rows
+
+
+def table_reach(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | n | mean \\|S\\| | min | max | mean extra | mean R_w |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        _reach_rows(results),
+    )
+
+
+def _rollback_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _task_results(results)
     # Paper 1 reports rollback from full (segmented) drifted runs; flat is listed for contrast.
-    lines = [
-        "| mode | class | mean rho_rev | mean n | mean restored/quarantined/escalated |",
-        "| --- | --- | ---: | ---: | ---: |",
-    ]
-    for mode, rows in sorted(_by_mode(results).items()):
-        rb = [r["metrics"]["rollback_completeness"] for r in rows]
+    rows: list[tuple[str, ...]] = []
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        rb = [r["metrics"]["rollback_completeness"] for r in mode_rows]
         for cls, extra_key in (
             ("idempotent", "restored"),
             ("versioned", "restored"),
@@ -181,28 +226,29 @@ def table_rollback(results: list[dict[str, Any]]) -> str:
             rhos = [c[cls]["rho_rev"] for c in rb if c[cls]["rho_rev"] is not None]
             ns = [c[cls]["n"] for c in rb]
             extras = [c[cls][extra_key] for c in rb]
-            rho_txt = "—" if not rhos else f"{_mean(rhos):.3f}"
-            lines.append(
-                f"| {mode} | {cls} | {rho_txt} | {_mean(ns):.1f} | {_mean(extras):.1f} |"
+            rho_txt = _EMDASH if not rhos else f"{_mean(rhos):.3f}"
+            rows.append(
+                (mode, cls, rho_txt, f"{_mean(ns):.1f}", f"{_mean(extras):.1f}")
             )
-    return "\n".join(lines)
+    return rows
 
 
-def table_overhead(results: list[dict[str, Any]]) -> str:
+def table_rollback(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | class | mean rho_rev | mean n | mean restored/quarantined/escalated |",
+        "| --- | --- | ---: | ---: | ---: |",
+        _rollback_rows(results),
+    )
+
+
+def _overhead_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _task_results(results)
-    lines = [
-        "| mode | n | mean verify_ms | mean relative vs same-seed flat |",
-        "| --- | ---: | ---: | ---: |",
-    ]
-    flat_by_seed = {
-        r["seed"]: r
-        for r in results
-        if r["mode"] == "flat"
-    }
-    for mode, rows in sorted(_by_mode(results).items()):
-        verify = [float(r["metrics"]["verification_overhead"]["verify_ms"]) for r in rows]
+    rows: list[tuple[str, ...]] = []
+    flat_by_seed = {r["seed"]: r for r in results if r["mode"] == "flat"}
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        verify = [float(r["metrics"]["verification_overhead"]["verify_ms"]) for r in mode_rows]
         relatives: list[float] = []
-        for r in rows:
+        for r in mode_rows:
             rel = r["metrics"]["verification_overhead"].get("relative")
             if rel is None and r["seed"] in flat_by_seed and mode != "flat":
                 t = r["metrics"]["verification_overhead"]["total_ms"]
@@ -212,11 +258,17 @@ def table_overhead(results: list[dict[str, Any]]) -> str:
                 rel = 0.0
             if rel is not None:
                 relatives.append(float(rel))
-        rel_txt = "—" if not relatives else f"{_mean(relatives):.4f}"
-        lines.append(
-            f"| {mode} | {len(rows)} | {_mean(verify):.1f} | {rel_txt} |"
-        )
-    return "\n".join(lines)
+        rel_txt = _EMDASH if not relatives else f"{_mean(relatives):.4f}"
+        rows.append((mode, str(len(mode_rows)), f"{_mean(verify):.1f}", rel_txt))
+    return rows
+
+
+def table_overhead(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | n | mean verify_ms | mean relative vs same-seed flat |",
+        "| --- | ---: | ---: | ---: |",
+        _overhead_rows(results),
+    )
 
 
 def q2_series(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -234,59 +286,98 @@ def q2_series(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def table_credentials(results: list[dict[str, Any]]) -> str:
+def _q2_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    return [
+        (
+            str(row["seed"]),
+            str(row["mode"]),
+            str(row["reachable_set_size"]),
+            str(row["declared"]),
+            str(row["extra"]),
+        )
+        for row in q2_series(results)
+    ]
+
+
+def _credentials_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _task_results(results)
-    lines = [
+    rows: list[tuple[str, ...]] = []
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        tau = [float(r["metrics"]["tau_seconds"]) for r in mode_rows if r["metrics"].get("tau_seconds") is not None]
+        tsec = [float(r["metrics"]["T_seconds"]) for r in mode_rows if r["metrics"].get("T_seconds") is not None]
+        ratio = [float(r["metrics"]["credential_ratio"]) for r in mode_rows if r["metrics"].get("credential_ratio") is not None]
+        rows.append(
+            (mode, str(len(mode_rows)), f"{_mean(tau):.3f}", f"{_mean(tsec):.3f}", f"{_mean(ratio):.3f}")
+        )
+    return rows
+
+
+def table_credentials(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
         "| mode | n | mean τ (s) | mean T (s) | mean τ/T |",
         "| --- | ---: | ---: | ---: | ---: |",
-    ]
-    for mode, rows in sorted(_by_mode(results).items()):
-        tau = [float(r["metrics"]["tau_seconds"]) for r in rows if r["metrics"].get("tau_seconds") is not None]
-        tsec = [float(r["metrics"]["T_seconds"]) for r in rows if r["metrics"].get("T_seconds") is not None]
-        ratio = [float(r["metrics"]["credential_ratio"]) for r in rows if r["metrics"].get("credential_ratio") is not None]
-        lines.append(
-            f"| {mode} | {len(rows)} | {_mean(tau):.3f} | {_mean(tsec):.3f} | {_mean(ratio):.3f} |"
+        _credentials_rows(results),
+    )
+
+
+def _segment_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    results = _task_results(results)
+    rows: list[tuple[str, ...]] = []
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        p = [float(r["metrics"]["segment_p_ms"]) for r in mode_rows if r["metrics"].get("segment_p_ms") is not None]
+        q = [float(r["metrics"]["segment_q_ms"]) for r in mode_rows if r["metrics"].get("segment_q_ms") is not None]
+        dmean = [float(r["metrics"]["d_ms_mean"]) for r in mode_rows if r["metrics"].get("d_ms_mean") is not None]
+        dmax = [float(r["metrics"]["d_ms_max"]) for r in mode_rows if r["metrics"].get("d_ms_max") is not None]
+        rows.append(
+            (
+                mode,
+                str(len(mode_rows)),
+                f"{_mean(p):.1f}",
+                f"{_mean(q):.1f}",
+                f"{_mean(dmean):.1f}",
+                f"{_mean(dmax):.1f}",
+            )
         )
-    return "\n".join(lines)
+    return rows
 
 
 def table_segment(results: list[dict[str, Any]]) -> str:
-    results = _task_results(results)
-    lines = [
+    return _md_lines(
         "| mode | n | mean p (ms) | mean q (ms) | mean d (ms) | max d (ms) |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
-    ]
-    for mode, rows in sorted(_by_mode(results).items()):
-        p = [float(r["metrics"]["segment_p_ms"]) for r in rows if r["metrics"].get("segment_p_ms") is not None]
-        q = [float(r["metrics"]["segment_q_ms"]) for r in rows if r["metrics"].get("segment_q_ms") is not None]
-        dmean = [float(r["metrics"]["d_ms_mean"]) for r in rows if r["metrics"].get("d_ms_mean") is not None]
-        dmax = [float(r["metrics"]["d_ms_max"]) for r in rows if r["metrics"].get("d_ms_max") is not None]
-        lines.append(
-            f"| {mode} | {len(rows)} | {_mean(p):.1f} | {_mean(q):.1f} | {_mean(dmean):.1f} | {_mean(dmax):.1f} |"
-        )
-    return "\n".join(lines)
+        _segment_rows(results),
+    )
 
 
-def table_step(results: list[dict[str, Any]]) -> str:
+def _step_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     rows = [
         r
         for r in results
         if (r.get("declaration") or {}).get("granularity") == "step"
     ]
-    lines = [
-        "| seed | mean τ/T | max τ/T | mean d (ms) | max d (ms) |",
-        "| ---: | ---: | ---: | ---: | ---: |",
-    ]
     if not rows:
-        lines.append("| — | — | — | — | — |")
-        return "\n".join(lines)
+        return [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)]
+    out: list[tuple[str, ...]] = []
     for r in sorted(rows, key=lambda x: x["seed"]):
         m = r["metrics"]
-        lines.append(
-            f"| {r['seed']} | {m.get('step_ratio_mean'):.3f} | {m.get('step_ratio_max'):.3f} | "
-            f"{m.get('d_ms_mean'):.1f} | {m.get('d_ms_max'):.1f} |"
+        out.append(
+            (
+                str(r["seed"]),
+                f"{m.get('step_ratio_mean'):.3f}",
+                f"{m.get('step_ratio_max'):.3f}",
+                f"{m.get('d_ms_mean'):.1f}",
+                f"{m.get('d_ms_max'):.1f}",
+            )
         )
-    return "\n".join(lines)
+    return out
+
+
+def table_step(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| seed | mean τ/T | max τ/T | mean d (ms) | max d (ms) |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+        _step_rows(results),
+    )
 
 
 def emit_markdown(results: list[dict[str, Any]]) -> str:
@@ -345,6 +436,73 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
     return "\n".join(parts) + "\n"
 
 
+def emit_latex(results: list[dict[str, Any]]) -> str:
+    """LaTeX-ready tabular rows for the manuscript. Same numbers as emit_markdown."""
+    parts = [
+        "% Manuscript tables (LaTeX-ready rows from make paper-tables)",
+        f"% {source_caption(results, 'all tables').strip('*')}",
+        "% Paste into Paper 1 tabulars. Simulator/fixture numbers must not be used.",
+        "",
+        _tex_tabular(
+            results,
+            "Reach",
+            "lrrrrrr",
+            r"mode & $n$ & mean $|S|$ & min & max & mean extra & mean $R_w$",
+            _reach_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Rollback",
+            "llrrr",
+            r"mode & class & mean $\rho_{\mathrm{rev}}$ & mean $n$ & mean restored/quarantined/escalated",
+            _rollback_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Overhead",
+            "lrrr",
+            r"mode & $n$ & mean verify\_ms & mean relative vs same-seed flat",
+            _overhead_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Credentials",
+            "lrrrr",
+            r"mode & $n$ & mean $\tau$ (s) & mean $T$ (s) & mean $\tau/T$",
+            _credentials_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Segment",
+            "lrrrrr",
+            r"mode & $n$ & mean $p$ (ms) & mean $q$ (ms) & mean $d$ (ms) & max $d$ (ms)",
+            _segment_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Step",
+            "rrrrr",
+            r"seed & mean $\tau/T$ & max $\tau/T$ & mean $d$ (ms) & max $d$ (ms)",
+            _step_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Q2 series",
+            "rlrrr",
+            r"seed & mode & $|S|$ & declared & extra",
+            _q2_rows(results),
+        ),
+        "",
+    ]
+    return "\n".join(parts)
+
+
 def write_q2_figure(results: list[dict[str, Any]], out_dir: Path) -> Path | None:
     try:
         import matplotlib
@@ -389,6 +547,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--out", type=Path, default=ROOT / "analysis" / "output")
+    parser.add_argument(
+        "--format",
+        choices=("markdown", "latex"),
+        default="markdown",
+        help="markdown for make analyse; latex for make paper-tables",
+    )
     args = parser.parse_args(argv)
     results = load_results(args.results)
     try:
@@ -397,6 +561,13 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.format == "latex":
+        text = emit_latex(results)
+        out_path = args.out / "tables.tex"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
     markdown = emit_markdown(results)
     (args.out / "tables.md").write_text(markdown)
     write_q2_figure(results, args.out)
