@@ -53,21 +53,27 @@ def test_analyse_refuses_simulator_fixtures(tmp_path):
     assert "source=simulator" in source_caption(results, "Reach")
 
 
-def test_analyse_refuses_leftover_verify_spans(tmp_path):
-    run_dir = tmp_path / "leftover-run"
-    run_dir.mkdir()
-    (run_dir / "result.json").write_text(
-        '{"run_id":"leftover-run","source":"cluster","mode":"full","seed":2,'
-        '"steps_completed":30,"declaration":{"granularity":"step","services":["records","search","notify"]}}'
-    )
+def _cluster_run(tmp_path: Path, name: str, mode: str, n_verify: int, duration_fn=None):
     import pandas as pd
 
+    run_dir = tmp_path / name
+    run_dir.mkdir(parents=True)
+    (run_dir / "result.json").write_text(
+        f'{{"run_id":"{name}","source":"cluster","mode":"{mode}","seed":2,'
+        '"steps_completed":30,"declaration":{"granularity":"task","services":["records","search","notify"]}}'
+    )
+    fn = duration_fn or (lambda i: float(i + 1))
     pd.DataFrame(
         [
-            {"name": "verify", "duration_ms": float(i), "task_id": "leftover-run"}
-            for i in range(58)
+            {"name": "verify", "duration_ms": fn(i), "task_id": name}
+            for i in range(n_verify)
         ]
     ).to_parquet(run_dir / "spans.parquet", index=False)
+    return run_dir
+
+
+def test_analyse_refuses_leftover_verify_spans(tmp_path):
+    _cluster_run(tmp_path, "leftover-run", "full", 58)
     results = load_results(tmp_path)
     try:
         assert_cluster_provenance(results)
@@ -76,3 +82,44 @@ def test_analyse_refuses_leftover_verify_spans(tmp_path):
         msg = str(exc)
         assert "verify-span count 58 exceeds steps_completed=30" in msg
         assert "leftover Tempo traces" in msg
+
+
+def test_analyse_refuses_missing_verify_spans(tmp_path):
+    _cluster_run(tmp_path, "missing-run", "flat", 17)
+    results = load_results(tmp_path)
+    try:
+        assert_cluster_provenance(results)
+        raise AssertionError("expected ProvenanceError")
+    except ProvenanceError as exc:
+        msg = str(exc)
+        assert "verify-span count 17" in msg
+        assert "missing traces" in msg or "flat requires" in msg
+
+
+def test_analyse_refuses_full_below_floor(tmp_path):
+    _cluster_run(tmp_path, "missing-full", "full", 17)
+    results = load_results(tmp_path)
+    try:
+        assert_cluster_provenance(results)
+        raise AssertionError("expected ProvenanceError")
+    except ProvenanceError as exc:
+        msg = str(exc)
+        assert "verify-span count 17 below steps_completed-1=29" in msg
+        assert "missing traces" in msg
+
+
+def test_analyse_accepts_full_one_short_and_flat_exact(tmp_path):
+    _cluster_run(tmp_path / "full", "full-run", "full", 29)
+    _cluster_run(tmp_path / "flat", "flat-run", "flat", 30)
+    assert_cluster_provenance(load_results(tmp_path / "full"))
+    assert_cluster_provenance(load_results(tmp_path / "flat"))
+
+
+def test_analyse_refuses_zero_variance_verify_spans(tmp_path):
+    _cluster_run(tmp_path, "const-run", "full", 29, duration_fn=lambda _i: 1.0)
+    results = load_results(tmp_path)
+    try:
+        assert_cluster_provenance(results)
+        raise AssertionError("expected ProvenanceError")
+    except ProvenanceError as exc:
+        assert "zero variance" in str(exc)

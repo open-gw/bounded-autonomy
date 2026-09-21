@@ -56,13 +56,42 @@ def _task_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _verify_span_count_error(n_verify: int, steps: int, mode: str) -> str | None:
+    """Symmetric leftover / missing Tempo-trace check.
+
+    ``n > steps`` is leftover traces from a reused ``task_id``.
+    ``n < steps - 1`` is missing traces (full/step runs complete 29 of 30
+    because the undeclared docs injection never reaches a tool).
+    Flat runs complete every step, so they must match ``steps`` exactly.
+    """
+    if n_verify > steps:
+        return (
+            f"verify-span count {n_verify} exceeds steps_completed={steps} "
+            "(leftover Tempo traces)"
+        )
+    if mode == "flat" and n_verify != steps:
+        return (
+            f"verify-span count {n_verify} != steps_completed={steps} "
+            "(flat requires one verify span per completed step)"
+        )
+    floor = steps - 1
+    if n_verify < floor:
+        return (
+            f"verify-span count {n_verify} below steps_completed-1={floor} "
+            "(missing traces)"
+        )
+    return None
+
+
 def assert_cluster_provenance(results: list[dict[str, Any]]) -> None:
     """Refuse manuscript tables unless every result is from the cluster
     and verify-span durations actually vary (not the in-process constants).
 
-    Also refuse leftover Tempo traces: a SIGTERM'd retry that reused
-    ``task_id`` can ingest verify spans from the killed attempt, so the
-    count must not exceed ``steps_completed`` (default 30 if missing).
+    Also refuse leftover and missing Tempo traces: a SIGTERM'd retry that
+    reused ``task_id`` can ingest verify spans from the killed attempt, so
+    the count must not exceed ``steps_completed`` (default 30 if missing).
+    Fewer than ``steps_completed - 1`` means Tempo dropped spans. Flat
+    mode must match ``steps_completed`` exactly.
     """
     bad: list[str] = []
     for row in results:
@@ -82,16 +111,17 @@ def assert_cluster_provenance(results: list[dict[str, Any]]) -> None:
         n_verify = int((spans["name"] == "verify").sum()) if "name" in spans.columns else 0
         steps = row.get("steps_completed")
         cap = 30 if steps is None else int(steps)
-        if n_verify > cap:
-            bad.append(
-                f"{path}: verify-span count {n_verify} exceeds steps_completed={cap}"
-            )
+        count_err = _verify_span_count_error(n_verify, cap, str(row.get("mode") or ""))
+        if count_err:
+            bad.append(f"{path}: {count_err}")
     if not bad:
         return
     lines = [
         "refusing manuscript tables: every result.json must have source=cluster",
         "and verify-span durations with non-zero variance",
-        "and verify-span count ≤ steps_completed (leftover Tempo traces)",
+        "and verify-span count in [steps_completed-1, steps_completed]",
+        "  (leftover Tempo traces above the cap, missing traces below the floor;",
+        "   flat requires n == steps_completed)",
         "non-cluster or synthetic-span inputs:",
         *[f"  - {item}" for item in bad],
         "simulator/fixture numbers must not be pasted into the manuscript",
