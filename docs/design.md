@@ -76,8 +76,11 @@ Four MCP tool servers (`records`, `docs`, `search`, `notify`). Orchestrator: 30 
 
 ## Manuscript map
 
+Section VI timings were measured on Apple M3 Pro (12-core, 18 GiB, Darwin 25.5.0, Docker Engine 29.7.2 / Docker Desktop 4.87.0); details in [`docs/findings/12-reproducibility.md`](findings/12-reproducibility.md).
+
 | Manuscript | This repo |
 | --- | --- |
+| Section VI measurement host | [`docs/findings/12-reproducibility.md`](findings/12-reproducibility.md) |
 | Section VII study | `docs/study-design.md` |
 | Reach table | `make analyse` → table reach |
 | Rollback table | `make analyse` → table rollback |

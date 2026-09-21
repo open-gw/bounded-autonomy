@@ -29,14 +29,14 @@ stores:
   postgres: "17.5"
   postgres_image: "postgres:17.5"
   minio: "RELEASE.2025-07-23T15-54-02Z"
-  minio_image: "minio/minio:RELEASE.2025-07-23T15-54-02Z"
+  minio_image: "quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z"
   qdrant: "v1.13.6"
   qdrant_image: "qdrant/qdrant:v1.13.6"
 
 lineage:
-  marquez: "0.50.1"
-  marquez_image: "marquezproject/marquez:0.50.1"
-  marquez_web_image: "marquezproject/marquez-web:0.50.1"
+  marquez: "0.50.0"
+  marquez_image: "marquezproject/marquez:0.50.0"
+  marquez_web_image: "marquezproject/marquez-web:0.50.0"
   openlineage_spec: "1.27.0"
 
 telemetry:
