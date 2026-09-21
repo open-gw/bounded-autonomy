@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "long-multistep-full-step-seed3",
+  "profile": "long-multistep",
+  "mode": "full",
+  "seed": 3,
+  "started_at": "2026-09-21T15:17:44.773011Z",
+  "finished_at": "2026-09-21T15:18:08.594677Z",
+  "wall_clock_seconds": 23.82166600227356,
+  "source": "cluster",
+  "declaration": {
+    "task_id": "long-multistep-full-step-seed3",
+    "spiffe_id": "spiffe://rig/task/long-multistep-full-step-seed3",
+    "services": [
+      "records",
+      "search",
+      "notify"
+    ],
+    "expected_duration_seconds": 1800,
+    "granularity": "step"
+  },
+  "steps_completed": 30,
+  "write_counts": {
+    "idempotent": 11,
+    "versioned": 9,
+    "derived": 6,
+    "irreversible": 3
+  },
+  "metrics": {
+    "reachable_set_size": 3,
+    "reachable_services": [
+      "notify",
+      "records",
+      "search"
+    ],
+    "reachable_weight": 7,
+    "credential_ratio": 1.000000040033905,
+    "tau_seconds": 23.821666955947876,
+    "T_seconds": 23.82166600227356,
+    "tau_issued_epoch": 1790003864.773011,
+    "tau_not_after_epoch": 1790003888.594678,
+    "T_start_epoch": 1790003864.773011,
+    "T_end_epoch": 1790003888.594677,
+    "rollback_completeness": {
+      "idempotent": {
+        "rho_rev": 1.0,
+        "n": 11,
+        "restored": 11
+      },
+      "versioned": {
+        "rho_rev": 1.0,
+        "n": 9,
+        "restored": 9
+      },
+      "derived": {
+        "rho_rev": null,
+        "n": 6,
+        "quarantined": 6
+      },
+      "irreversible": {
+        "rho_rev": 0.0,
+        "n": 3,
+        "escalated": 3
+      }
+    },
+    "rho_enum": 1.0,
+    "verification_overhead": {
+      "absolute_seconds": 0.0007672080000000001,
+      "relative": 111.72527604516044,
+      "verify_ms": 2.5674580000000002,
+      "total_ms": 23824.23346027356
+    },
+    "segment_p_ms": 47.46294021606445,
+    "segment_q_ms": 377.1800994873047,
+    "step_ratio_mean": 1.960609076752675,
+    "step_ratio_max": 2.1976997934128413,
+    "d_ms_mean": 48.00037542978922,
+    "d_ms_max": 56.63108825683594
+  },
+  "policy_propagation_ms": [
+    48.26807975769043,
+    49.15189743041992,
+    48.60520362854004,
+    51.93018913269043,
+    48.69508743286133,
+    53.948163986206055,
+    47.737836837768555,
+    47.204017639160156,
+    49.75581169128418,
+    47.52182960510254,
+    49.70288276672363,
+    49.495697021484375,
+    53.663015365600586,
+    47.574758529663086,
+    0.0,
+    56.63108825683594,
+    53.217172622680664,
+    50.85897445678711,
+    49.15308952331543,
+    49.70812797546387,
+    48.88319969177246,
+    47.49798774719238,
+    48.1412410736084,
+    47.33586311340332,
+    50.080060958862305,
+    46.36096954345703,
+    47.842979431152344,
+    53.079843521118164,
+    49.97706413269043,
+    47.9891300201416
+  ],
+  "artefacts": {
+    "probe": "probe.parquet",
+    "flows": "flows.parquet",
+    "spans": "spans.parquet",
+    "lineage": "lineage.parquet",
+    "groundtruth": "groundtruth.parquet",
+    "svid": "svid.parquet"
+  }
+}
