@@ -51,3 +51,28 @@ def test_analyse_refuses_simulator_fixtures(tmp_path):
         assert "source=cluster" in str(exc)
         assert "simulator" in str(exc)
     assert "source=simulator" in source_caption(results, "Reach")
+
+
+def test_analyse_refuses_leftover_verify_spans(tmp_path):
+    run_dir = tmp_path / "leftover-run"
+    run_dir.mkdir()
+    (run_dir / "result.json").write_text(
+        '{"run_id":"leftover-run","source":"cluster","mode":"full","seed":2,'
+        '"steps_completed":30,"declaration":{"granularity":"step","services":["records","search","notify"]}}'
+    )
+    import pandas as pd
+
+    pd.DataFrame(
+        [
+            {"name": "verify", "duration_ms": float(i), "task_id": "leftover-run"}
+            for i in range(58)
+        ]
+    ).to_parquet(run_dir / "spans.parquet", index=False)
+    results = load_results(tmp_path)
+    try:
+        assert_cluster_provenance(results)
+        raise AssertionError("expected ProvenanceError")
+    except ProvenanceError as exc:
+        msg = str(exc)
+        assert "verify-span count 58 exceeds steps_completed=30" in msg
+        assert "leftover Tempo traces" in msg

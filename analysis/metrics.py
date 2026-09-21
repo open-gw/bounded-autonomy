@@ -56,14 +56,55 @@ def credential_ratio(
     svid_records: pd.DataFrame | Iterable[Mapping[str, Any]],
     spans: pd.DataFrame | Iterable[Mapping[str, Any]],
 ) -> float:
-    """|{spiffe_id}| / |{task_id in spans}|. NaN if no tasks."""
-    svid_df = _frame(svid_records, ["task_id", "spiffe_id", "issued_at", "not_after"])
-    spans_df = _frame(spans, ["task_id", "name"])
+    """τ / T. τ is credential lifetime, T is the OTel root-span duration.
+
+    Epoch columns issued_at_epoch / not_after_epoch and a span named `run`
+    with start_epoch / end_epoch are preferred. Falls back to unique
+    SPIFFE IDs over unique task IDs when those columns are absent.
+    """
+    svid_df = _frame(
+        svid_records,
+        [
+            "task_id",
+            "spiffe_id",
+            "issued_at",
+            "not_after",
+            "issued_at_epoch",
+            "not_after_epoch",
+        ],
+    )
+    spans_df = _frame(spans, ["task_id", "name", "start_epoch", "end_epoch", "duration_ms"])
+    tau = None
+    if not svid_df.empty and svid_df["issued_at_epoch"].notna().any():
+        issued = pd.to_numeric(svid_df["issued_at_epoch"], errors="coerce")
+        ended = pd.to_numeric(svid_df["not_after_epoch"], errors="coerce")
+        tau = float((ended - issued).max())
+    t_seconds = None
+    if not spans_df.empty:
+        runs = spans_df[spans_df["name"] == "run"]
+        if not runs.empty and "start_epoch" in runs.columns and runs["start_epoch"].notna().any():
+            t_seconds = float(
+                pd.to_numeric(runs["end_epoch"], errors="coerce").max()
+                - pd.to_numeric(runs["start_epoch"], errors="coerce").min()
+            )
+        elif not runs.empty:
+            t_seconds = float(pd.to_numeric(runs["duration_ms"], errors="coerce").fillna(0).sum()) / 1000.0
+    if tau is not None and t_seconds is not None and t_seconds > 0:
+        return tau / t_seconds
     n_svids = svid_df["spiffe_id"].dropna().nunique() if not svid_df.empty else 0
     n_tasks = spans_df["task_id"].dropna().nunique() if not spans_df.empty else 0
     if n_tasks == 0:
         return float("nan")
     return float(n_svids) / float(n_tasks)
+
+
+def verify_duration_variance(spans: pd.DataFrame | Iterable[Mapping[str, Any]]) -> float:
+    spans_df = _frame(spans, ["name", "duration_ms"])
+    verify = spans_df[spans_df["name"] == VERIFY_SPAN]
+    if verify.empty:
+        return 0.0
+    return float(pd.to_numeric(verify["duration_ms"], errors="coerce").nunique())
+
 
 
 def _match_key(row: Mapping[str, Any]) -> tuple:

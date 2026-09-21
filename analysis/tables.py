@@ -14,6 +14,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+import pandas as pd
+
+from metrics import verify_duration_variance
+
 ROOT = Path(__file__).resolve().parents[1]
 _mpl = ROOT / "analysis" / ".mplcache"
 _mpl.mkdir(parents=True, exist_ok=True)
@@ -25,7 +29,11 @@ FIXTURE_RESULTS = ROOT / "analysis" / "fixtures" / "results"
 
 
 def load_results(results_dir: Path) -> list[dict[str, Any]]:
-    paths = sorted(results_dir.glob("**/result.json"))
+    paths = [
+        path
+        for path in sorted(results_dir.glob("**/result.json"))
+        if not any(part.startswith("_") for part in path.parts)
+    ]
     out: list[dict[str, Any]] = []
     for path in paths:
         doc = json.loads(path.read_text())
@@ -40,19 +48,51 @@ class ProvenanceError(Exception):
     """Manuscript tables requested from non-cluster results."""
 
 
+def _task_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in results
+        if (r.get("declaration") or {}).get("granularity", "task") == "task"
+    ]
+
+
 def assert_cluster_provenance(results: list[dict[str, Any]]) -> None:
-    """Refuse manuscript tables unless every result is from the cluster."""
+    """Refuse manuscript tables unless every result is from the cluster
+    and verify-span durations actually vary (not the in-process constants).
+
+    Also refuse leftover Tempo traces: a SIGTERM'd retry that reused
+    ``task_id`` can ingest verify spans from the killed attempt, so the
+    count must not exceed ``steps_completed`` (default 30 if missing).
+    """
     bad: list[str] = []
     for row in results:
         source = row.get("source")
         path = row.get("_path", row.get("run_id", "?"))
         if source != "cluster":
             bad.append(f"{path}: source={source!r}")
+            continue
+        span_path = Path(path).parent / "spans.parquet"
+        if not span_path.exists():
+            bad.append(f"{path}: missing spans.parquet")
+            continue
+        spans = pd.read_parquet(span_path)
+        nunique = verify_duration_variance(spans)
+        if nunique <= 1:
+            bad.append(f"{path}: verify-span durations have zero variance (nunique={nunique})")
+        n_verify = int((spans["name"] == "verify").sum()) if "name" in spans.columns else 0
+        steps = row.get("steps_completed")
+        cap = 30 if steps is None else int(steps)
+        if n_verify > cap:
+            bad.append(
+                f"{path}: verify-span count {n_verify} exceeds steps_completed={cap}"
+            )
     if not bad:
         return
     lines = [
         "refusing manuscript tables: every result.json must have source=cluster",
-        "non-cluster inputs:",
+        "and verify-span durations with non-zero variance",
+        "and verify-span count ≤ steps_completed (leftover Tempo traces)",
+        "non-cluster or synthetic-span inputs:",
         *[f"  - {item}" for item in bad],
         "simulator/fixture numbers must not be pasted into the manuscript",
     ]
@@ -77,21 +117,24 @@ def _mean(xs: list[float]) -> float:
 
 
 def table_reach(results: list[dict[str, Any]]) -> str:
+    results = _task_results(results)
     lines = [
-        "| mode | n | mean \\|S\\| | min | max | mean extra |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| mode | n | mean \\|S\\| | min | max | mean extra | mean R_w |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for mode, rows in sorted(_by_mode(results).items()):
         sizes = [int(r["metrics"]["reachable_set_size"]) for r in rows]
         declared_n = [len(r["declaration"]["services"]) for r in rows]
         extra = [s - d for s, d in zip(sizes, declared_n)]
+        weights = [int(r["metrics"].get("reachable_weight") or 0) for r in rows]
         lines.append(
-            f"| {mode} | {len(rows)} | {_mean(sizes):.3f} | {min(sizes)} | {max(sizes)} | {_mean(extra):.3f} |"
+            f"| {mode} | {len(rows)} | {_mean(sizes):.3f} | {min(sizes)} | {max(sizes)} | {_mean(extra):.3f} | {_mean(weights):.3f} |"
         )
     return "\n".join(lines)
 
 
 def table_rollback(results: list[dict[str, Any]]) -> str:
+    results = _task_results(results)
     # Paper 1 reports rollback from full (segmented) drifted runs; flat is listed for contrast.
     lines = [
         "| mode | class | mean rho_rev | mean n | mean restored/quarantined/escalated |",
@@ -116,6 +159,7 @@ def table_rollback(results: list[dict[str, Any]]) -> str:
 
 
 def table_overhead(results: list[dict[str, Any]]) -> str:
+    results = _task_results(results)
     lines = [
         "| mode | n | mean verify_ms | mean relative vs same-seed flat |",
         "| --- | ---: | ---: | ---: |",
@@ -147,6 +191,7 @@ def table_overhead(results: list[dict[str, Any]]) -> str:
 
 def q2_series(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-seed |S| for the Q2 grouped-bar figure."""
+    results = _task_results(results)
     return [
         {
             "seed": r["seed"],
@@ -157,6 +202,61 @@ def q2_series(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for r in sorted(results, key=lambda r: (r["seed"], r["mode"]))
     ]
+
+
+def table_credentials(results: list[dict[str, Any]]) -> str:
+    results = _task_results(results)
+    lines = [
+        "| mode | n | mean τ (s) | mean T (s) | mean τ/T |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for mode, rows in sorted(_by_mode(results).items()):
+        tau = [float(r["metrics"]["tau_seconds"]) for r in rows if r["metrics"].get("tau_seconds") is not None]
+        tsec = [float(r["metrics"]["T_seconds"]) for r in rows if r["metrics"].get("T_seconds") is not None]
+        ratio = [float(r["metrics"]["credential_ratio"]) for r in rows if r["metrics"].get("credential_ratio") is not None]
+        lines.append(
+            f"| {mode} | {len(rows)} | {_mean(tau):.3f} | {_mean(tsec):.3f} | {_mean(ratio):.3f} |"
+        )
+    return "\n".join(lines)
+
+
+def table_segment(results: list[dict[str, Any]]) -> str:
+    results = _task_results(results)
+    lines = [
+        "| mode | n | mean p (ms) | mean q (ms) | mean d (ms) | max d (ms) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for mode, rows in sorted(_by_mode(results).items()):
+        p = [float(r["metrics"]["segment_p_ms"]) for r in rows if r["metrics"].get("segment_p_ms") is not None]
+        q = [float(r["metrics"]["segment_q_ms"]) for r in rows if r["metrics"].get("segment_q_ms") is not None]
+        dmean = [float(r["metrics"]["d_ms_mean"]) for r in rows if r["metrics"].get("d_ms_mean") is not None]
+        dmax = [float(r["metrics"]["d_ms_max"]) for r in rows if r["metrics"].get("d_ms_max") is not None]
+        lines.append(
+            f"| {mode} | {len(rows)} | {_mean(p):.1f} | {_mean(q):.1f} | {_mean(dmean):.1f} | {_mean(dmax):.1f} |"
+        )
+    return "\n".join(lines)
+
+
+def table_step(results: list[dict[str, Any]]) -> str:
+    rows = [
+        r
+        for r in results
+        if (r.get("declaration") or {}).get("granularity") == "step"
+    ]
+    lines = [
+        "| seed | mean τ/T | max τ/T | mean d (ms) | max d (ms) |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+    ]
+    if not rows:
+        lines.append("| — | — | — | — | — |")
+        return "\n".join(lines)
+    for r in sorted(rows, key=lambda x: x["seed"]):
+        m = r["metrics"]
+        lines.append(
+            f"| {r['seed']} | {m.get('step_ratio_mean'):.3f} | {m.get('step_ratio_max'):.3f} | "
+            f"{m.get('d_ms_mean'):.1f} | {m.get('d_ms_max'):.1f} |"
+        )
+    return "\n".join(lines)
 
 
 def emit_markdown(results: list[dict[str, Any]]) -> str:
@@ -182,6 +282,24 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
         source_caption(results, "Overhead"),
         "",
         table_overhead(results),
+        "",
+        "## Credentials (Q2)",
+        "",
+        source_caption(results, "Credentials"),
+        "",
+        table_credentials(results),
+        "",
+        "## Segment p/q/d (Q4)",
+        "",
+        source_caption(results, "Segment"),
+        "",
+        table_segment(results),
+        "",
+        "## Step granularity",
+        "",
+        source_caption(results, "Step"),
+        "",
+        table_step(results),
         "",
         "## Q2 series",
         "",
