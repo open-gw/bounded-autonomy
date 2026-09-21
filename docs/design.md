@@ -7,8 +7,8 @@ Paper 1 artefact for *Containing and Unwinding the Blast Radius of Agentic Workf
 ```
 TaskDeclaration CRD  →  segment controller (kopf)
                      →  CiliumNetworkPolicy (egress to declared services only,
-                        ingress to those services only from the task SPIFFE)
-                     →  SPIRE registration  spiffe://rig/task/<task-id>
+                        ingress to those services only from the task-id label)
+                     →  standalone SPIRE registration  spiffe://rig/task/<task-id>
                      →  SVID TTL = declaration.expected_duration_seconds
 ```
 
@@ -28,9 +28,9 @@ Eight services (`rig/services.yaml`). The agent talks only to MCP tool servers. 
 
 ## Identity
 
-SPIRE server + agent. One SVID per task, not per pod. Two sequential tasks on the same pod receive two SPIFFE IDs and two segments. An expired SVID collapses the segment (mTLS / audience check fail) without terminating the pod.
+SPIRE server + agent (standalone, not Cilium-bundled). One SVID per task, not per pod. Two sequential tasks on the same pod receive two SPIFFE IDs and two segments. An expired SVID fails the `verify` audience check without terminating the pod.
 
-Cilium mutual authentication is enabled (`authentication.mode: required` on generated CNPs). See `docs/NEW-MATTER.md` for the residual use of a pod annotation as the SPIRE selector: Kubernetes label values cannot hold a SPIFFE ID, and the same pod must change identity without a restart.
+Cilium selects the segment on `bounded-autonomy.io/task-id`, which the controller binds to the task SVID. Cilium mutual authentication is Paper 2. See `docs/NEW-MATTER.md`.
 
 ## Observation (four exporters)
 

@@ -89,10 +89,15 @@ def _label_workload(task_id: str, namespace: str) -> None:
 
 
 def _spire_entry(spec: dict) -> None:
-    parent = os.environ.get("BA_SPIRE_PARENT", "spiffe://rig/spire/agent")
+    if os.environ.get("BA_SKIP_SPIRE") == "1":
+        return
+    parent = os.environ.get(
+        "BA_SPIRE_PARENT",
+        "spiffe://rig/spire/agent/k8s_psat/bounded-autonomy/k3d-bounded-autonomy-server-0",
+    )
     entry = render_spire_entry(spec, parent)
     cmd = [
-        os.environ.get("SPIRE_SERVER_BIN", "spire-server"),
+        "/opt/spire/bin/spire-server",
         "entry",
         "create",
         "-spiffeID",
@@ -106,10 +111,29 @@ def _spire_entry(spec: dict) -> None:
     ]
     for sel in entry["selectors"]:
         cmd.extend(["-selector", sel])
-    # Best-effort: in the simulator this is a no-op if the binary is absent.
-    if os.environ.get("BA_SKIP_SPIRE") == "1":
-        return
-    subprocess.run(cmd, check=False, capture_output=True, text=True)
+    ns = os.environ.get("BA_SPIRE_NAMESPACE", "spire")
+    try:
+        from kubernetes.stream import stream
+
+        core = _core()
+        pods = core.list_namespaced_pod(
+            ns, label_selector="app.kubernetes.io/name=spire-server"
+        )
+        if not pods.items:
+            return
+        stream(
+            core.connect_get_namespaced_pod_exec,
+            pods.items[0].metadata.name,
+            ns,
+            command=cmd,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+            container="spire-server",
+        )
+    except Exception:
+        subprocess.run(cmd, check=False, capture_output=True, text=True)
 
 
 @kopf.on.startup()

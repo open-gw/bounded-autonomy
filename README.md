@@ -36,12 +36,12 @@ pip install -r requirements.txt
 
 make help
 make test          # schema + metrics; no cluster
-make up            # k3d, Cilium, SPIRE, stores, observers
+make up            # k3d delete+create, Cilium, standalone SPIRE, stores
 make run PROFILE=long-multistep MODE=full SEED=1
 make down
 ```
 
-Ten runs and the manuscript tables:
+Ten runs and the manuscript tables (cluster only):
 
 ```bash
 make up
@@ -50,7 +50,7 @@ for mode in flat full; do
     make run PROFILE=long-multistep MODE=$mode SEED=$seed
   done
 done
-make analyse       # prints the three tables; writes analysis/output/
+make analyse       # exits 1 unless every result.json has source=cluster
 make down
 ```
 

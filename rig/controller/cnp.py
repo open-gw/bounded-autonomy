@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 # Kubernetes label values cannot hold a SPIFFE ID. The controller writes this
-# annotation/label on the workload pod (no restart) so SPIRE can select it.
-# Cilium CNP matches that label AND requires mTLS (authentication.mode=required).
+# label on the workload pod (no restart) so SPIRE and Cilium can select it.
+# Paper 1 CNP matches the label only; Cilium mTLS is Paper 2.
 TASK_LABEL = "bounded-autonomy.io/task-id"
 
 
@@ -35,7 +35,6 @@ def render_cnp(
                 }
             ],
             "toPorts": [{"ports": [{"port": "http", "protocol": "TCP"}]}],
-            "authentication": {"mode": "required"},
         }
         for svc in service_names
     ]
@@ -82,7 +81,6 @@ def render_cnp(
                         "fromEndpoints": [
                             {"matchLabels": {TASK_LABEL: task_id}}
                         ],
-                        "authentication": {"mode": "required"},
                     }
                 ],
             },

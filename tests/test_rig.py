@@ -34,7 +34,7 @@ def test_step_plan_mix_is_12_9_6_3():
         assert {s.tool for s in plan} <= {"records", "search", "notify"}
 
 
-def test_cnp_allows_only_declared_and_requires_mtls():
+def test_cnp_allows_only_declared_services():
     spec = {
         "taskId": "t1",
         "expectedDurationSeconds": 60,
@@ -45,11 +45,18 @@ def test_cnp_allows_only_declared_and_requires_mtls():
     assert egress["spec"]["endpointSelector"]["matchLabels"][TASK_LABEL] == "t1"
     dests = []
     for rule in egress["spec"]["egress"]:
-        if "authentication" in rule:
-            assert rule["authentication"]["mode"] == "required"
-            dests.append(rule["toEndpoints"][0]["matchLabels"]["app.kubernetes.io/name"])
+        assert "authentication" not in rule
+        endpoints = rule.get("toEndpoints") or []
+        if not endpoints:
+            continue
+        labels = endpoints[0]["matchLabels"]
+        if "app.kubernetes.io/name" in labels:
+            dests.append(labels["app.kubernetes.io/name"])
     assert dests == ["records", "search", "notify"]
     assert len(rendered["ingress"]) == 3
+    for ingress in rendered["ingress"]:
+        for rule in ingress["spec"]["ingress"]:
+            assert "authentication" not in rule
     entry = render_spire_entry(spec, "spiffe://rig/spire/agent")
     assert entry["spiffe_id"] == spiffe_for("t1")
     assert entry["x509_svid_ttl"] == 60

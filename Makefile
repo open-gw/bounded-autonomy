@@ -38,13 +38,13 @@ fixtures: ## Write synthetic result.json + parquet fixtures used by the notebook
 notebook: fixtures ## Run the pre-registered notebook on synthetic fixtures
 	$(PYTHON) $(ROOT)/scripts/run_notebook.py
 
-analyse: ## Emit the three manuscript tables from runs/results/**/result.json
+analyse: ## Manuscript tables; exits 1 unless every result.json has source=cluster
 	$(PYTHON) $(ROOT)/analysis/tables.py --results $(ROOT)/runs/results --out $(ROOT)/analysis/output
 
-up: ## Bring up k3d + Cilium + SPIRE + stores + observers
+up: ## k3d cluster delete+create, Cilium, standalone SPIRE, stores, observers
 	$(ROOT)/scripts/cluster_up.sh
 
-down: ## Tear down the k3d cluster and local mounts
+down: ## k3d cluster delete (nothing else)
 	$(ROOT)/scripts/cluster_down.sh
 
 run: ## Execute one profile (PROFILE MODE SEED)

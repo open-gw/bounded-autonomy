@@ -1,6 +1,331 @@
-# SPIRE is installed by Cilium (authentication.mutual.spire.install) with
-# trust domain `rig` (see rig/cluster/cilium-values.yaml).
-# Task SVIDs: spiffe://rig/task/<task-id>, TTL from TaskDeclaration.
-# Parent id used by the controller when creating entries:
-parent_id: spiffe://rig/spire/agent
-trust_domain: rig
+# Standalone SPIRE for Paper 1. Trust domain `rig`.
+# Cilium's bundled SPIRE/mTLS is out of scope (Paper 2). SVIDs feed
+# credential_ratio; CNP selects on bounded-autonomy.io/task-id.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: spire
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: spire
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-server
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spire-server-bundle
+  namespace: spire
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch", "update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spire-server-bundle
+  namespace: spire
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: spire-server-bundle
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "nodes/proxy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-agent
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: spire
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-bundle
+  namespace: spire
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server
+  namespace: spire
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      trust_domain = "rig"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      ca_ttl = "24h"
+      default_x509_svid_ttl = "1h"
+      socket_path = "/run/spire/sockets/server.sock"
+    }
+    plugins {
+      DataStore "sql" {
+        plugin_data {
+          database_type = "sqlite3"
+          connection_string = "/run/spire/data/datastore.sqlite3"
+        }
+      }
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          clusters = {
+            "bounded-autonomy" = {
+              service_account_allow_list = ["spire:spire-agent"]
+              audience = ["spire-server"]
+            }
+          }
+        }
+      }
+      KeyManager "memory" {
+        plugin_data {}
+      }
+      Notifier "k8sbundle" {
+        plugin_data {
+          namespace = "spire"
+          config_map = "spire-bundle"
+        }
+      }
+    }
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = "8080"
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent
+  namespace: spire
+data:
+  agent.conf: |
+    agent {
+      data_dir = "/run/spire"
+      log_level = "INFO"
+      server_address = "spire-server"
+      server_port = "8081"
+      socket_path = "/run/spire/sockets/agent.sock"
+      trust_bundle_path = "/run/spire/bundle/bundle.crt"
+      trust_domain = "rig"
+    }
+    plugins {
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          cluster = "bounded-autonomy"
+        }
+      }
+      KeyManager "memory" {
+        plugin_data {}
+      }
+      WorkloadAttestor "k8s" {
+        plugin_data {
+          skip_kubelet_verification = true
+        }
+      }
+    }
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = "8080"
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spire-server
+  namespace: spire
+  labels:
+    app.kubernetes.io/name: spire-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spire-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spire-server
+    spec:
+      serviceAccountName: spire-server
+      containers:
+        - name: spire-server
+          image: ghcr.io/spiffe/spire-server:1.15.3
+          args:
+            - -config
+            - /run/spire/config/server.conf
+          ports:
+            - name: api
+              containerPort: 8081
+            - name: health
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: sockets
+              mountPath: /run/spire/sockets
+            - name: data
+              mountPath: /run/spire/data
+      volumes:
+        - name: config
+          configMap:
+            name: spire-server
+        - name: sockets
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  selector:
+    app.kubernetes.io/name: spire-server
+  ports:
+    - name: api
+      port: 8081
+      targetPort: api
+    - name: health
+      port: 8080
+      targetPort: health
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+  labels:
+    app.kubernetes.io/name: spire-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spire-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spire-agent
+    spec:
+      serviceAccountName: spire-agent
+      hostPID: true
+      containers:
+        - name: spire-agent
+          image: ghcr.io/spiffe/spire-agent:1.15.3
+          args:
+            - -config
+            - /run/spire/config/agent.conf
+          ports:
+            - name: health
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: bundle
+              mountPath: /run/spire/bundle
+              readOnly: true
+            - name: sockets
+              mountPath: /run/spire/sockets
+            - name: spire-token
+              mountPath: /var/run/secrets/tokens
+      volumes:
+        - name: config
+          configMap:
+            name: spire-agent
+        - name: bundle
+          configMap:
+            name: spire-bundle
+        - name: sockets
+          hostPath:
+            path: /run/spire/agent-sockets
+            type: DirectoryOrCreate
+        - name: spire-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: spire-agent
+                  expirationSeconds: 7200
+                  audience: spire-server

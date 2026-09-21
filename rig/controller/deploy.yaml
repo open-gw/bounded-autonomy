@@ -16,8 +16,8 @@ rules:
     resources: ["ciliumnetworkpolicies"]
     verbs: ["*"]
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch", "patch"]
+    resources: ["pods", "pods/exec"]
+    verbs: ["get", "list", "watch", "patch", "create"]
   - apiGroups: ["events.k8s.io"]
     resources: ["events"]
     verbs: ["create"]
@@ -60,3 +60,7 @@ spec:
               value: /app:/app/rig
             - name: BA_SKIP_SPIRE
               value: "0"
+            - name: BA_SPIRE_NAMESPACE
+              value: spire
+            - name: BA_SPIRE_PARENT
+              value: spiffe://rig/spire/agent/k8s_psat/bounded-autonomy/k3d-bounded-autonomy-server-0
