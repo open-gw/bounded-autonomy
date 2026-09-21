@@ -12,7 +12,10 @@ metadata:
   name: default-deny
   namespace: rig
 spec:
-  description: default-deny all workload traffic; segments add allow-lists
-  endpointSelector: {}
-  ingress: []
-  egress: []
+  description: default-deny agent datapath; segments add allow-lists
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent
+  enableDefaultDeny:
+    ingress: true
+    egress: true

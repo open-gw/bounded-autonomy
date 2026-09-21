@@ -12,7 +12,7 @@ TaskDeclaration CRD  →  segment controller (kopf)
                      →  SVID TTL = declaration.expected_duration_seconds
 ```
 
-Default-deny in the workload namespace. Deleting the CRD, or TTL expiry, removes the CNP. `step` granularity is a narrowed declaration update that replaces the CNP.
+Default-deny on the agent pod; per-service ingress CNPs on declared tools (task-id label). A namespace-wide deny isolates stores from their tool servers. Deleting the CRD, or TTL expiry, removes the CNP. `step` granularity is a narrowed declaration update that replaces the CNP.
 
 Policy propagation is the interval from the CRD event timestamp to the first Hubble observation that the new allow-list is in effect. Exported per step.
 

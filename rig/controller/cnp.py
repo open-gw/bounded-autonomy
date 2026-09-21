@@ -8,6 +8,16 @@ from typing import Any, Iterable
 # label on the workload pod (no restart) so SPIRE and Cilium can select it.
 # Paper 1 CNP matches the label only; Cilium mTLS is Paper 2.
 TASK_LABEL = "bounded-autonomy.io/task-id"
+SERVICE_PORTS = {
+    "records": "8081",
+    "docs": "8082",
+    "search": "8083",
+    "notify": "8084",
+    "billing": "8085",
+    "analytics": "8086",
+    "audit": "8087",
+    "catalog": "8088",
+}
 
 
 def spiffe_for(task_id: str) -> str:
@@ -34,11 +44,14 @@ def render_cnp(
                     }
                 }
             ],
-            "toPorts": [{"ports": [{"port": "http", "protocol": "TCP"}]}],
+            "toPorts": [
+                {"ports": [{"port": SERVICE_PORTS.get(svc, "80"), "protocol": "TCP"}]}
+            ],
         }
         for svc in service_names
     ]
-    # DNS + SPIRE agent so the pod can still resolve and fetch SVIDs.
+    # DNS (no Cilium DNS-proxy rules: those hijack 53 and blackhole if the
+    # proxy is not ready). SPIRE uses a local agent socket, not this path.
     egress.append(
         {
             "toEndpoints": [
@@ -50,10 +63,8 @@ def render_cnp(
                 }
             ],
             "toPorts": [
-                {
-                    "ports": [{"port": "53", "protocol": "UDP"}],
-                    "rules": {"dns": [{"matchPattern": "*"}]},
-                }
+                {"ports": [{"port": "53", "protocol": "UDP"}]},
+                {"ports": [{"port": "53", "protocol": "TCP"}]},
             ],
         }
     )
@@ -76,6 +87,10 @@ def render_cnp(
                         "app.kubernetes.io/part-of": "bounded-autonomy",
                     }
                 },
+                # Selecting the service isolates its ingress to the task-id
+                # allow-list. Namespace-wide default-deny is agent-only so
+                # tool servers can still reach Postgres/MinIO/Qdrant.
+                "enableDefaultDeny": {"ingress": True},
                 "ingress": [
                     {
                         "fromEndpoints": [

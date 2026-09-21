@@ -10,7 +10,7 @@
 ## Deviations
 
 - End-to-end `cilium connectivity`-style probe is a cluster acceptance test (`make up`); it is not run in `make test`. CNP rendering is tested without a cluster.
-- Default-deny CNP is namespace-wide; DNS egress is appended so the task pod can still resolve.
+- Default-deny CNP selects only the agent pod. Ingress isolation of declared services is a per-service CNP keyed on `bounded-autonomy.io/task-id` (see `docs/findings/16-cnp-driver.md`). A namespace-wide deny isolates tool servers from their stores.
 - Cluster create/delete semantics were wrong in the first pass (Helm uninstall in place). Task 15 replaces that.
 
 ## Manuscript impact

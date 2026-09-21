@@ -53,8 +53,22 @@ def test_cnp_allows_only_declared_services():
         if "app.kubernetes.io/name" in labels:
             dests.append(labels["app.kubernetes.io/name"])
     assert dests == ["records", "search", "notify"]
+    ports = [
+        rule["toPorts"][0]["ports"][0]["port"]
+        for rule in egress["spec"]["egress"]
+        if rule.get("toEndpoints")
+        and "app.kubernetes.io/name" in rule["toEndpoints"][0]["matchLabels"]
+    ]
+    assert ports == ["8081", "8083", "8084"]
     assert len(rendered["ingress"]) == 3
     for ingress in rendered["ingress"]:
+        assert ingress["spec"]["enableDefaultDeny"] == {"ingress": True}
+        selectors = [
+            ep["matchLabels"]
+            for rule in ingress["spec"]["ingress"]
+            for ep in rule["fromEndpoints"]
+        ]
+        assert all(sel.get(TASK_LABEL) == "t1" for sel in selectors)
         for rule in ingress["spec"]["ingress"]:
             assert "authentication" not in rule
     entry = render_spire_entry(spec, "spiffe://rig/spire/agent")
