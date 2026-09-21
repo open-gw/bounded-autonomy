@@ -4,9 +4,10 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 1,
-  "started_at": "2026-09-21T12:36:21.794636Z",
-  "finished_at": "2026-09-21T12:36:21.828227Z",
-  "wall_clock_seconds": 0.033591,
+  "started_at": "2026-09-21T14:14:46.632831Z",
+  "finished_at": "2026-09-21T14:15:56.854583Z",
+  "wall_clock_seconds": 0.009847,
+  "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed1",
     "spiffe_id": "spiffe://rig/task/long-multistep-full-seed1",
@@ -57,8 +58,8 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.356,
-      "relative": null,
+      "absolute_seconds": 0.296,
+      "relative": 0.10168776371308016,
       "verify_ms": 356.0,
       "total_ms": 2611.0
     }

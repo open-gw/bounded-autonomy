@@ -1,16 +1,16 @@
 {
   "schema_version": "1.0.0",
-  "run_id": "long-multistep-flat-seed1",
+  "run_id": "long-multistep-full-seed5",
   "profile": "long-multistep",
-  "mode": "flat",
-  "seed": 1,
-  "started_at": "2026-09-21T14:13:58.891574Z",
-  "finished_at": "2026-09-21T14:14:03.480678Z",
-  "wall_clock_seconds": 0.072601,
+  "mode": "full",
+  "seed": 5,
+  "started_at": "2026-09-21T14:19:36.246958Z",
+  "finished_at": "2026-09-21T14:20:45.771740Z",
+  "wall_clock_seconds": 0.010021,
   "source": "cluster",
   "declaration": {
-    "task_id": "long-multistep-flat-seed1",
-    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed1",
+    "task_id": "long-multistep-full-seed5",
+    "spiffe_id": "spiffe://rig/task/long-multistep-full-seed5",
     "services": [
       "records",
       "search",
@@ -21,19 +21,14 @@
   },
   "steps_completed": 30,
   "write_counts": {
-    "idempotent": 11,
-    "versioned": 10,
-    "derived": 6,
+    "idempotent": 12,
+    "versioned": 9,
+    "derived": 5,
     "irreversible": 3
   },
   "metrics": {
-    "reachable_set_size": 8,
+    "reachable_set_size": 3,
     "reachable_services": [
-      "analytics",
-      "audit",
-      "billing",
-      "catalog",
-      "docs",
       "notify",
       "records",
       "search"
@@ -42,18 +37,18 @@
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
-        "n": 11,
-        "restored": 11
+        "n": 12,
+        "restored": 12
       },
       "versioned": {
         "rho_rev": 1.0,
-        "n": 10,
-        "restored": 10
+        "n": 9,
+        "restored": 9
       },
       "derived": {
         "rho_rev": null,
-        "n": 6,
-        "quarantined": 6
+        "n": 5,
+        "quarantined": 5
       },
       "irreversible": {
         "rho_rev": 0.0,
@@ -63,13 +58,15 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.06,
-      "relative": null,
-      "verify_ms": 60.0,
-      "total_ms": 2370.0
+      "absolute_seconds": 0.296,
+      "relative": 0.10168776371308016,
+      "verify_ms": 356.0,
+      "total_ms": 2611.0
     }
   },
-  "policy_propagation_ms": [],
+  "policy_propagation_ms": [
+    16.0
+  ],
   "artefacts": {
     "probe": "probe.parquet",
     "flows": "flows.parquet",

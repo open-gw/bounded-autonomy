@@ -1,16 +1,16 @@
 {
   "schema_version": "1.0.0",
-  "run_id": "long-multistep-flat-seed1",
+  "run_id": "long-multistep-flat-seed3",
   "profile": "long-multistep",
   "mode": "flat",
-  "seed": 1,
-  "started_at": "2026-09-21T14:13:58.891574Z",
-  "finished_at": "2026-09-21T14:14:03.480678Z",
-  "wall_clock_seconds": 0.072601,
+  "seed": 3,
+  "started_at": "2026-09-21T14:14:31.137385Z",
+  "finished_at": "2026-09-21T14:14:35.928570Z",
+  "wall_clock_seconds": 0.034529,
   "source": "cluster",
   "declaration": {
-    "task_id": "long-multistep-flat-seed1",
-    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed1",
+    "task_id": "long-multistep-flat-seed3",
+    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed3",
     "services": [
       "records",
       "search",

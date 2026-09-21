@@ -1,16 +1,16 @@
 {
   "schema_version": "1.0.0",
-  "run_id": "long-multistep-flat-seed1",
+  "run_id": "long-multistep-flat-seed5",
   "profile": "long-multistep",
   "mode": "flat",
-  "seed": 1,
-  "started_at": "2026-09-21T14:13:58.891574Z",
-  "finished_at": "2026-09-21T14:14:03.480678Z",
-  "wall_clock_seconds": 0.072601,
+  "seed": 5,
+  "started_at": "2026-09-21T14:14:41.640703Z",
+  "finished_at": "2026-09-21T14:14:45.990778Z",
+  "wall_clock_seconds": 0.041234,
   "source": "cluster",
   "declaration": {
-    "task_id": "long-multistep-flat-seed1",
-    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed1",
+    "task_id": "long-multistep-flat-seed5",
+    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed5",
     "services": [
       "records",
       "search",
@@ -21,9 +21,9 @@
   },
   "steps_completed": 30,
   "write_counts": {
-    "idempotent": 11,
+    "idempotent": 12,
     "versioned": 10,
-    "derived": 6,
+    "derived": 5,
     "irreversible": 3
   },
   "metrics": {
@@ -42,8 +42,8 @@
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
-        "n": 11,
-        "restored": 11
+        "n": 12,
+        "restored": 12
       },
       "versioned": {
         "rho_rev": 1.0,
@@ -52,8 +52,8 @@
       },
       "derived": {
         "rho_rev": null,
-        "n": 6,
-        "quarantined": 6
+        "n": 5,
+        "quarantined": 5
       },
       "irreversible": {
         "rho_rev": 0.0,
