@@ -19,11 +19,22 @@ Definitions: [`docs/study-design.md`](docs/study-design.md). Architecture: [`doc
 
 ## Prerequisites
 
-Personal machine, personal accounts. Docker running. The Makefile installs the remaining pinned CLIs into `.tools/` on first `make up`.
+Personal machine, personal accounts. Docker 27+ running, and the invoking user able to run `docker` without sudo. Clone this repository with git, then the Makefile installs the remaining pinned CLIs into `.tools/` on `make tools` (also invoked by `make up`).
 
-- Docker 27+
-- Python 3.12 (3.13 works; CI and `rig/versions.yaml` pin 3.12.8)
+- git
+- GNU make
+- Docker 27+ (`docker` on PATH, daemon up, user in the `docker` group)
+- Python 3.12 (3.13 works; CI and `rig/versions.yaml` pin 3.12.8) with the stdlib `venv` module
 - ~8 GiB RAM free for the single-node cluster
+
+A clean Ubuntu 24.04 cloud image has Python 3.12 and git, but not `make` or `python3-venv`. `python3 -m venv` fails until that package is installed:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git make python3 python3-venv
+git clone git@github.com:open-gw/bounded-autonomy.git
+cd bounded-autonomy
+```
 
 Pinned versions: [`rig/versions.yaml`](rig/versions.yaml). Nothing floats.
 
@@ -36,19 +47,24 @@ pip install -r requirements.txt
 
 make help
 make test          # schema + metrics; no cluster
+make tools         # pinned k3d/kubectl/helm/cilium/hubble into .tools/
 make up            # k3d delete+create, Cilium, standalone SPIRE, stores
 make run PROFILE=long-multistep MODE=full SEED=1
 make down
 ```
 
-Ten runs and the manuscript tables (cluster only):
+Fifteen runs and the manuscript tables (cluster only). Task-granularity `flat` and `full` seeds 1–5, then five `full` runs at step granularity:
 
 ```bash
+make tools
 make up
 for mode in flat full; do
   for seed in 1 2 3 4 5; do
     make run PROFILE=long-multistep MODE=$mode SEED=$seed
   done
+done
+for seed in 1 2 3 4 5; do
+  make run PROFILE=long-multistep MODE=full SEED=$seed GRANULARITY=step
 done
 make analyse       # exits 1 unless every result.json has source=cluster
 make paper-tables  # LaTeX rows; same provenance gate
