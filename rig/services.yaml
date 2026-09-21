@@ -1,0 +1,45 @@
+# Eight services in the Paper 1 rig. Source of truth for names and weights.
+# Declared set for long-multistep is records, search, notify (see study-design §1.2).
+schema_version: "1.0.0"
+namespace: rig
+services:
+  - name: records
+    sensitivity: 3
+    kind: mcp
+    store: postgres
+    port: 8081
+  - name: docs
+    sensitivity: 2
+    kind: mcp
+    store: minio
+    port: 8082
+  - name: search
+    sensitivity: 2
+    kind: mcp
+    store: qdrant
+    port: 8083
+  - name: notify
+    sensitivity: 3
+    kind: mcp
+    store: notify-log
+    port: 8084
+  - name: billing
+    sensitivity: 3
+    kind: placeholder
+    store: null
+    port: 8085
+  - name: analytics
+    sensitivity: 1
+    kind: placeholder
+    store: null
+    port: 8086
+  - name: audit
+    sensitivity: 2
+    kind: placeholder
+    store: null
+    port: 8087
+  - name: catalog
+    sensitivity: 1
+    kind: placeholder
+    store: null
+    port: 8088

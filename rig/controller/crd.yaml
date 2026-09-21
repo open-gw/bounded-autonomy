@@ -1,0 +1,51 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: taskdeclarations.bounded-autonomy.io
+spec:
+  group: bounded-autonomy.io
+  names:
+    kind: TaskDeclaration
+    listKind: TaskDeclarationList
+    plural: taskdeclarations
+    singular: taskdeclaration
+    shortNames: [td]
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [taskId, expectedDurationSeconds, services]
+              properties:
+                taskId:
+                  type: string
+                expectedDurationSeconds:
+                  type: integer
+                  minimum: 1
+                granularity:
+                  type: string
+                  enum: [task, step]
+                createdAt:
+                  type: string
+                services:
+                  type: array
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}

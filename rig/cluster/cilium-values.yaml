@@ -1,0 +1,24 @@
+# Cilium 1.17.13 on a one-node k3d cluster. Pins live in rig/versions.yaml.
+kubeProxyReplacement: true
+k8sServicePort: 6443
+operator:
+  replicas: 1
+ipam:
+  mode: kubernetes
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: false
+authentication:
+  enabled: true
+  mutual:
+    spire:
+      enabled: true
+      trustDomain: rig
+      install:
+        enabled: true
+        namespace: cilium-spire
+cni:
+  exclusive: false

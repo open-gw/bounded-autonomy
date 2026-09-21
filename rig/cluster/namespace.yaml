@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rig
+  labels:
+    bounded-autonomy.io/part-of: paper1
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: rig
+spec:
+  description: default-deny all workload traffic; segments add allow-lists
+  endpointSelector: {}
+  ingress: []
+  egress: []

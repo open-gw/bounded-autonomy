@@ -1,0 +1,47 @@
+# Local environments
+.DS_Store
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+analysis/.mplcache/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Run artefacts: keep directory, ignore binaries, keep result.json summaries
+runs/results/**
+!runs/results/
+!runs/results/.gitkeep
+!runs/results/*/
+!runs/results/*/result.json
+
+# Generated analysis outputs (notebook writes these locally)
+analysis/output/
+*.png
+*.svg
+!docs/**/*.png
+!docs/**/*.svg
+
+# Large binary dumps
+*.parquet
+!analysis/fixtures/parquet/*.parquet
+
+# k3d / kube leftovers
+kubeconfig.yaml
+.kube/
+*.kubeconfig

@@ -1,0 +1,6 @@
+# SPIRE is installed by Cilium (authentication.mutual.spire.install) with
+# trust domain `rig` (see rig/cluster/cilium-values.yaml).
+# Task SVIDs: spiffe://rig/task/<task-id>, TTL from TaskDeclaration.
+# Parent id used by the controller when creating entries:
+parent_id: spiffe://rig/spire/agent
+trust_domain: rig

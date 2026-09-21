@@ -1,0 +1,11 @@
+postgres:
+  upsert: idempotent
+  insert: versioned
+minio:
+  put: versioned
+  put_overwrite: idempotent
+qdrant:
+  upsert: derived
+  delete: derived
+notify-log:
+  append: irreversible

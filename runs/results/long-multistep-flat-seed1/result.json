@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "long-multistep-flat-seed1",
+  "profile": "long-multistep",
+  "mode": "flat",
+  "seed": 1,
+  "started_at": "2026-09-21T12:36:22.388005Z",
+  "finished_at": "2026-09-21T12:36:22.421479Z",
+  "wall_clock_seconds": 0.033474,
+  "declaration": {
+    "task_id": "long-multistep-flat-seed1",
+    "spiffe_id": "spiffe://rig/task/long-multistep-flat-seed1",
+    "services": [
+      "records",
+      "search",
+      "notify"
+    ],
+    "expected_duration_seconds": 1800,
+    "granularity": "task"
+  },
+  "steps_completed": 30,
+  "write_counts": {
+    "idempotent": 11,
+    "versioned": 10,
+    "derived": 6,
+    "irreversible": 3
+  },
+  "metrics": {
+    "reachable_set_size": 8,
+    "reachable_services": [
+      "analytics",
+      "audit",
+      "billing",
+      "catalog",
+      "docs",
+      "notify",
+      "records",
+      "search"
+    ],
+    "credential_ratio": 1.0,
+    "rollback_completeness": {
+      "idempotent": {
+        "rho_rev": 1.0,
+        "n": 11,
+        "restored": 11
+      },
+      "versioned": {
+        "rho_rev": 1.0,
+        "n": 10,
+        "restored": 10
+      },
+      "derived": {
+        "rho_rev": null,
+        "n": 6,
+        "quarantined": 6
+      },
+      "irreversible": {
+        "rho_rev": 0.0,
+        "n": 3,
+        "escalated": 3
+      }
+    },
+    "rho_enum": 1.0,
+    "verification_overhead": {
+      "absolute_seconds": 0.06,
+      "relative": null,
+      "verify_ms": 60.0,
+      "total_ms": 2370.0
+    }
+  },
+  "policy_propagation_ms": [],
+  "artefacts": {
+    "probe": "probe.parquet",
+    "flows": "flows.parquet",
+    "spans": "spans.parquet",
+    "lineage": "lineage.parquet",
+    "groundtruth": "groundtruth.parquet",
+    "svid": "svid.parquet"
+  }
+}

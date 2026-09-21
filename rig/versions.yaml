@@ -1,0 +1,71 @@
+# Pinned versions for the Paper 1 rig. Nothing floats.
+# Bump only with an entry in docs/NEW-MATTER.md and a findings note.
+schema_version: "1.0.0"
+
+runtime:
+  python: "3.12.8"
+  docker: ">=27.0.0"
+
+cluster:
+  k3d: "v5.8.3"
+  k3s_image: "rancher/k3s:v1.32.3-k3s1"
+  kubectl: "v1.32.3"
+  helm: "v3.17.2"
+  cilium_cli: "v0.18.5"
+  hubble_cli: "v1.17.5"
+
+cni:
+  cilium_chart: "1.17.13"
+  cilium_image: "quay.io/cilium/cilium:v1.17.13"
+  hubble_relay_image: "quay.io/cilium/hubble-relay:v1.17.13"
+
+identity:
+  spire: "1.15.3"
+  spire_server_image: "ghcr.io/spiffe/spire-server:1.15.3"
+  spire_agent_image: "ghcr.io/spiffe/spire-agent:1.15.3"
+  trust_domain: "rig"
+
+stores:
+  postgres: "17.5"
+  postgres_image: "postgres:17.5"
+  minio: "RELEASE.2025-07-23T15-54-02Z"
+  minio_image: "minio/minio:RELEASE.2025-07-23T15-54-02Z"
+  qdrant: "v1.13.6"
+  qdrant_image: "qdrant/qdrant:v1.13.6"
+
+lineage:
+  marquez: "0.50.1"
+  marquez_image: "marquezproject/marquez:0.50.1"
+  marquez_web_image: "marquezproject/marquez-web:0.50.1"
+  openlineage_spec: "1.27.0"
+
+telemetry:
+  otel_collector: "0.127.0"
+  otel_collector_image: "otel/opentelemetry-collector-contrib:0.127.0"
+  tempo: "2.7.2"
+  tempo_image: "grafana/tempo:2.7.2"
+
+python_packages:
+  jsonschema: "4.23.0"
+  pyyaml: "6.0.2"
+  pandas: "2.2.3"
+  pyarrow: "19.0.1"
+  pytest: "8.3.5"
+  pytest-timeout: "2.3.1"
+  kopf: "1.37.5"
+  kubernetes: "32.0.1"
+  fastapi: "0.115.12"
+  uvicorn: "0.34.2"
+  httpx: "0.28.1"
+  pydantic: "2.10.6"
+  psycopg: "3.2.6"
+  minio: "7.2.15"
+  qdrant-client: "1.13.3"
+  openlineage-python: "1.27.0"
+  opentelemetry-api: "1.31.1"
+  opentelemetry-sdk: "1.31.1"
+  opentelemetry-exporter-otlp: "1.31.1"
+  nbformat: "5.10.4"
+  nbclient: "0.10.2"
+  matplotlib: "3.10.1"
+  jinja2: "3.1.6"

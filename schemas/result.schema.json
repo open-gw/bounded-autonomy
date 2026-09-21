@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bounded-autonomy.io/schemas/result.schema.json",
+  "title": "RunResult",
+  "description": "Study-design §5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "profile",
+    "mode",
+    "seed",
+    "started_at",
+    "finished_at",
+    "wall_clock_seconds",
+    "declaration",
+    "steps_completed",
+    "write_counts",
+    "metrics",
+    "policy_propagation_ms",
+    "artefacts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,62}$"
+    },
+    "profile": { "const": "long-multistep" },
+    "mode": { "enum": ["flat", "full"] },
+    "seed": { "type": "integer", "minimum": 0 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "wall_clock_seconds": { "type": "number", "minimum": 0 },
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "spiffe_id",
+        "services",
+        "expected_duration_seconds",
+        "granularity"
+      ],
+      "properties": {
+        "task_id": { "type": "string", "minLength": 1 },
+        "spiffe_id": {
+          "type": "string",
+          "pattern": "^spiffe://rig/task/.+$"
+        },
+        "services": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "expected_duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "granularity": { "enum": ["task", "step"] }
+      }
+    },
+    "steps_completed": { "type": "integer", "minimum": 0, "maximum": 30 },
+    "write_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idempotent", "versioned", "derived", "irreversible"],
+      "properties": {
+        "idempotent": { "type": "integer", "minimum": 0 },
+        "versioned": { "type": "integer", "minimum": 0 },
+        "derived": { "type": "integer", "minimum": 0 },
+        "irreversible": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reachable_set_size",
+        "reachable_services",
+        "credential_ratio",
+        "rollback_completeness",
+        "rho_enum",
+        "verification_overhead"
+      ],
+      "properties": {
+        "reachable_set_size": { "type": "integer", "minimum": 0 },
+        "reachable_services": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "credential_ratio": { "type": ["number", "null"] },
+        "rollback_completeness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["idempotent", "versioned", "derived", "irreversible"],
+          "properties": {
+            "idempotent": { "$ref": "#/$defs/classIdempotent" },
+            "versioned": { "$ref": "#/$defs/classVersioned" },
+            "derived": { "$ref": "#/$defs/classDerived" },
+            "irreversible": { "$ref": "#/$defs/classIrreversible" }
+          }
+        },
+        "rho_enum": { "type": ["number", "null"] },
+        "verification_overhead": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["absolute_seconds", "relative", "verify_ms", "total_ms"],
+          "properties": {
+            "absolute_seconds": { "type": "number" },
+            "relative": { "type": ["number", "null"] },
+            "verify_ms": { "type": "number", "minimum": 0 },
+            "total_ms": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "policy_propagation_ms": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "artefacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe", "flows", "spans", "lineage", "groundtruth", "svid"],
+      "properties": {
+        "probe": { "type": "string" },
+        "flows": { "type": "string" },
+        "spans": { "type": "string" },
+        "lineage": { "type": "string" },
+        "groundtruth": { "type": "string" },
+        "svid": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "classIdempotent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rho_rev", "n", "restored"],
+      "properties": {
+        "rho_rev": { "type": ["number", "null"] },
+        "n": { "type": "integer", "minimum": 0 },
+        "restored": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "classVersioned": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rho_rev", "n", "restored"],
+      "properties": {
+        "rho_rev": { "type": ["number", "null"] },
+        "n": { "type": "integer", "minimum": 0 },
+        "restored": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "classDerived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rho_rev", "n", "quarantined"],
+      "properties": {
+        "rho_rev": { "type": ["number", "null"] },
+        "n": { "type": "integer", "minimum": 0 },
+        "quarantined": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "classIrreversible": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rho_rev", "n", "escalated"],
+      "properties": {
+        "rho_rev": { "type": ["number", "null"] },
+        "n": { "type": "integer", "minimum": 0 },
+        "escalated": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

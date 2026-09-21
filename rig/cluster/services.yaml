@@ -1,0 +1,376 @@
+# Eight services. Sensitivity is an annotation, not a network selector.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: records
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: records
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: records
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: records
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "3"
+    spec:
+      containers:
+        - name: tool
+          image: ba-runtime:paper1
+          args: ["python", "-m", "tools.http_server", "--name", "records", "--port", "8081"]
+          env:
+            - name: TOOL_NAME
+              value: records
+            - name: STORE_DSN
+              value: postgresql://rig:rig@postgres:5432/rig
+          ports:
+            - name: http
+              containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: records
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: records
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: records
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: docs
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docs
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docs
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "2"
+    spec:
+      containers:
+        - name: tool
+          image: ba-runtime:paper1
+          args: ["python", "-m", "tools.http_server", "--name", "docs", "--port", "8082"]
+          env:
+            - name: TOOL_NAME
+              value: docs
+            - name: MINIO_ENDPOINT
+              value: minio:9000
+          ports:
+            - name: http
+              containerPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docs
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: docs
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: docs
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: search
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: search
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: search
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "2"
+    spec:
+      containers:
+        - name: tool
+          image: ba-runtime:paper1
+          args: ["python", "-m", "tools.http_server", "--name", "search", "--port", "8083"]
+          env:
+            - name: TOOL_NAME
+              value: search
+            - name: QDRANT_URL
+              value: http://qdrant:6333
+          ports:
+            - name: http
+              containerPort: 8083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: search
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: search
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notify
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: notify
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notify
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notify
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "3"
+    spec:
+      containers:
+        - name: tool
+          image: ba-runtime:paper1
+          args: ["python", "-m", "tools.http_server", "--name", "notify", "--port", "8084"]
+          env:
+            - name: TOOL_NAME
+              value: notify
+            - name: NOTIFY_LOG
+              value: /var/log/notify.jsonl
+          ports:
+            - name: http
+              containerPort: 8084
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notify
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: notify
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: notify
+  ports:
+    - name: http
+      port: 8084
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: billing
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "3"
+    spec:
+      containers:
+        - name: placeholder
+          image: nginx:1.27.4-alpine
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: billing
+  ports:
+    - name: http
+      port: 8085
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: analytics
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: analytics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: analytics
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "1"
+    spec:
+      containers:
+        - name: placeholder
+          image: nginx:1.27.4-alpine
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: analytics
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: analytics
+  ports:
+    - name: http
+      port: 8086
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: audit
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audit
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "2"
+    spec:
+      containers:
+        - name: placeholder
+          image: nginx:1.27.4-alpine
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: audit
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: audit
+  ports:
+    - name: http
+      port: 8087
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: catalog
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: catalog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: catalog
+        app.kubernetes.io/part-of: bounded-autonomy
+      annotations:
+        bounded-autonomy.io/sensitivity: "1"
+    spec:
+      containers:
+        - name: placeholder
+          image: nginx:1.27.4-alpine
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: rig
+  labels:
+    app.kubernetes.io/name: catalog
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: catalog
+  ports:
+    - name: http
+      port: 8088
+      targetPort: http

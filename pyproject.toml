@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bounded-autonomy-rig"
+version = "0.1.0"
+description = "Paper 1 artefact: containing the blast radius of agentic workflows"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "analysis", "rig", "scripts"]
+timeout = 60

@@ -1,0 +1,26 @@
+# Applied by cluster_up.sh. A Job template the observer re-runs per step.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: probe-script
+  namespace: rig
+data:
+  probe.py: |
+    # Placeholder: the in-process observer in harness.simulator is the
+    # implementation used for Paper 1 metrics until Hubble export is attached.
+    print("probe job installed")
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: observer-install
+  namespace: rig
+spec:
+  ttlSecondsAfterFinished: 120
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: probe
+          image: python:3.12.8-slim
+          command: ["python", "-c", "print('observer ready')"]
