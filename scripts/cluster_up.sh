@@ -15,18 +15,32 @@ rm -f /tmp/ba-cluster-up
 
 CFG="$ROOT/rig/cluster/k3d.yaml"
 CLEANUP_CFG=""
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  # macOS has no bpffs. Bind-mounting /sys/fs/bpf from the host hides the
-  # in-node mount. Strip volumes; cluster_up mounts bpf inside the node.
-  CFG="$(mktemp)"
-  CLEANUP_CFG="$CFG"
-  "$PYTHON" - "$ROOT/rig/cluster/k3d.yaml" "$CFG" <<'PY'
-import sys, yaml
+# Host volume binds in k3d.yaml are not safe as written:
+# - Darwin has no bpffs; bind-mounting /sys/fs/bpf hides the in-node mount.
+# - Linux cgroup v2 (nsdelegate) + Docker cgroupns=private: bind-mounting
+#   host /sys/fs/cgroup makes kubelet write cgroup.procs under kubepods/
+#   that do not exist on the host hierarchy (FailedCreatePodSandBox).
+# Always rewrite: drop cgroup; drop bpf on Darwin. bpf is mounted inside
+# the node below when the host bind is absent.
+CFG="$(mktemp)"
+CLEANUP_CFG="$CFG"
+"$PYTHON" - "$ROOT/rig/cluster/k3d.yaml" "$CFG" <<'PY'
+import platform, sys, yaml
 doc = yaml.safe_load(open(sys.argv[1]))
-doc.pop("volumes", None)
+if platform.system() == "Darwin":
+    doc.pop("volumes", None)
+else:
+    vols = [
+        v
+        for v in (doc.get("volumes") or [])
+        if "/sys/fs/cgroup" not in str(v.get("volume", ""))
+    ]
+    if vols:
+        doc["volumes"] = vols
+    else:
+        doc.pop("volumes", None)
 yaml.safe_dump(doc, open(sys.argv[2], "w"), sort_keys=False)
 PY
-fi
 
 k3d_bin cluster create --config "$CFG" --wait
 if [[ -n "$CLEANUP_CFG" ]]; then

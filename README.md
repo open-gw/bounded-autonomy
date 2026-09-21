@@ -36,6 +36,8 @@ git clone git@github.com:open-gw/bounded-autonomy.git
 cd bounded-autonomy
 ```
 
+`make up` drops the host `/sys/fs/cgroup` bind on Linux cgroup v2 (bind-mounting it into a `cgroupns=private` k3d node makes kubelet fail with `cgroup.procs: no such file or directory`) and mounts bpf inside the node when the host has no bpffs.
+
 Pinned versions: [`rig/versions.yaml`](rig/versions.yaml). Nothing floats.
 
 ## One profile, end to end

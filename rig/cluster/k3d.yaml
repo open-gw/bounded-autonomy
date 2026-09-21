@@ -6,8 +6,9 @@ servers: 1
 agents: 0
 image: rancher/k3s:v1.32.3-k3s1
 volumes:
-  # Host bpffs/cgroup. On Darwin, cluster_up.sh strips these and mounts
-  # inside the node instead (macOS has no /sys/fs/bpf).
+  # Specced host binds. cluster_up.sh rewrites this file before k3d create:
+  # Darwin drops both (no host bpffs). Linux drops cgroup (cgroup v2
+  # nsdelegate + cgroupns=private breaks kubelet) and keeps bpf.
   - volume: /sys/fs/bpf:/sys/fs/bpf
     nodeFilters: [all]
   - volume: /sys/fs/cgroup:/sys/fs/cgroup
