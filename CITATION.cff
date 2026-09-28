@@ -6,9 +6,12 @@ type: software
 title: "bounded-autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
 abstract: >-
   One-node k3d measurement rig for Paper 1 of Containing and Unwinding the
-  Blast Radius of Agentic Workflows (ICSA artefact). One profile
-  (long-multistep), two modes (flat, full), five seeds, four metric exporters.
-  Nothing from Paper 2 is in this repository.
+  Blast Radius of Agentic Workflows (ICSA artefact). ICSA revision tag
+  v1.1-icsa-submission: profile long-multistep, modes flat and full, ten seeds,
+  median [IQR] tables, plus gateway, sweep, evasion, re-declaration, and
+  data-intensive cells. Nothing from Paper 2's hosted-LLM / multi-node surfaces
+  is in this repository. The v1.1 software version DOI is recorded only after
+  Zenodo mints it; do not invent one.
 authors:
   - family-names: Dhanaraj
     given-names: Rinu
@@ -19,7 +22,7 @@ identifiers:
     description: Concept DOI for all versions of this software
   - type: doi
     value: 10.5281/zenodo.23004819
-    description: Version DOI for tag v1.0.1-paper1
+    description: Version DOI for tag v1.0.1-paper1 (not v1.1-icsa-submission)
   - type: doi
     value: 10.5281/zenodo.23004531
     description: Paper 1 preprint on Zenodo
@@ -34,8 +37,8 @@ keywords:
   - cilium
   - spiffe
   - icsa-artefact
-version: "1.0.1"
-date-released: "2026-09-27"
+version: "1.1"
+date-released: "2026-09-28"
 preferred-citation:
   type: article
   title: "Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"

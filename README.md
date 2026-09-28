@@ -2,7 +2,7 @@
 
 Containing and Unwinding the Blast Radius of Agentic Workflows — Paper 1 artefact.
 
-One-node k3d rig. One profile (`long-multistep`). Two modes (`flat`, `full`). Five seeds. Four metric exporters. Nothing from Paper 2 is in this repository.
+One-node k3d rig. Profile `long-multistep`. Modes `flat` and `full`. ICSA revision (`v1.1-icsa-submission`): ten seeds, median [IQR] tables, plus gateway / sweep / evasion cells. Four metric exporters. Nothing from Paper 2's hosted-LLM / multi-node surfaces is in this repository.
 
 Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md). How to cite: [Cite](#cite).
 
@@ -12,9 +12,11 @@ Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md). How to cite: [Cite](
 
 Preprint DOI: [https://doi.org/10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531)
 
-Repository version DOI: [https://doi.org/10.5281/zenodo.23004819](https://doi.org/10.5281/zenodo.23004819) (tag `v1.0.1-paper1`)
+Repository version DOI for tag `v1.0.1-paper1`: [https://doi.org/10.5281/zenodo.23004819](https://doi.org/10.5281/zenodo.23004819)
 
 Repository concept DOI: [https://doi.org/10.5281/zenodo.23004818](https://doi.org/10.5281/zenodo.23004818)
+
+Tag `v1.1-icsa-submission` is the ICSA revision archive. Its software version DOI is **pending** the GitHub→Zenodo release hook; do not invent one. Record it here when Zenodo issues it.
 
 Dhanaraj, R. (2026). Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows (Version v1.0). Zenodo. https://doi.org/10.5281/zenodo.23004531
 
@@ -75,7 +77,7 @@ make run PROFILE=long-multistep MODE=full SEED=1
 make down
 ```
 
-Fifteen runs and the manuscript tables (cluster only). Task-granularity `flat` and `full` seeds 1–5, then five `full` runs at step granularity:
+Fifteen runs were the original Paper 1 set (task-granularity `flat` and `full` seeds 1–5, then five `full` runs at step granularity). The ICSA revision uses seeds 1–10 plus gateway cells via `make campaign`; see [`ARTIFACT.md`](ARTIFACT.md).
 
 ```bash
 make tools
@@ -90,7 +92,7 @@ for seed in 1 2 3 4 5; do
 done
 make analyse       # exits 1 unless every result.json has source=cluster
 make paper-tables  # LaTeX rows; same provenance gate
-make paper-tables TABLE=evasion  # 7-row evasion matrix; same gate
+make paper-tables-all  # headline + every TABLE= selector
 make down
 ```
 

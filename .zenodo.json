@@ -6,7 +6,7 @@
       "orcid": "0009-0007-9082-8846"
     }
   ],
-  "description": "Proof-of-concept measurement rig for the Bounded Autonomy paper: a one-node k3d cluster that evaluates per-task network segmentation, SPIFFE identity, and task-keyed lineage on a long-running multi-step agent workload. One profile (long-multistep), two modes (flat, full), five seeds, and four metric exporters (reach, credentials, rollback, overhead). This software artefact supplements the Paper 1 preprint.",
+  "description": "Proof-of-concept measurement rig for the Bounded Autonomy paper: a one-node k3d cluster that evaluates per-task network segmentation, SPIFFE identity, and task-keyed lineage on a long-running multi-step agent workload. ICSA revision (tag v1.1-icsa-submission): profile long-multistep, modes flat and full, ten seeds, median [IQR] tables, plus gateway, sweep, evasion, re-declaration, and data-intensive cells. Four metric exporters (reach, credentials, rollback, overhead). This software artefact supplements the Paper 1 preprint.",
   "upload_type": "software",
   "license": "MIT",
   "keywords": [

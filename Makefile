@@ -4,8 +4,8 @@
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-.PHONY: help tools test validate up down run campaign analyse paper-tables stores-smoke clean \
-	notebook fixtures label-race
+.PHONY: help tools test validate up down run campaign analyse paper-tables paper-tables-all \
+	anonymous stores-smoke clean notebook fixtures label-race
 
 ROOT    := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 PYTHON  ?= $(firstword $(wildcard $(ROOT)/.venv/bin/python) python3)
@@ -51,6 +51,15 @@ analyse: ## Manuscript tables; exits 1 unless every result.json has source=clust
 
 paper-tables: ## LaTeX-ready rows; same cluster / variance / span-count gate as analyse
 	$(PYTHON) $(ROOT)/analysis/tables.py --results $(ROOT)/runs/results --out $(ROOT)/analysis/output --format latex $(if $(TABLE),--table $(TABLE),)
+
+paper-tables-all: ## Headline tables plus every TABLE= selector (cluster provenance gate)
+	$(MAKE) paper-tables
+	@for t in dispersion sweep evasion gateway redeclaration step-split data-intensive; do \
+	  $(MAKE) paper-tables TABLE=$$t; \
+	done
+
+anonymous: ## Anonymised HEAD tree + tarball; fails if author/ORCID needles remain
+	$(PYTHON) $(ROOT)/scripts/package_anonymous.py
 
 up: ## k3d cluster delete+create, Cilium, standalone SPIRE, stores, observers
 	$(ROOT)/scripts/cluster_up.sh
