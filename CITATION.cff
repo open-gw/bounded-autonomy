@@ -16,10 +16,12 @@ authors:
 identifiers:
   - type: doi
     value: 10.5281/zenodo.23004531
+    description: Paper 1 preprint on Zenodo
   - type: url
     value: "https://doi.org/10.5281/zenodo.23004531"
 repository-code: "https://github.com/open-gw/bounded-autonomy"
 url: "https://doi.org/10.5281/zenodo.23004531"
+doi: 10.5281/zenodo.23004531
 license: MIT
 keywords:
   - bounded-autonomy
@@ -28,8 +30,8 @@ keywords:
   - cilium
   - spiffe
   - icsa-artefact
-version: "1.0.0"
-date-released: "2026-09-21"
+version: "1.0.1"
+date-released: "2026-09-27"
 preferred-citation:
   type: article
   title: "Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
@@ -38,10 +40,30 @@ preferred-citation:
       given-names: Rinu
       orcid: https://orcid.org/0009-0007-9082-8846
   year: 2026
-  publisher: Zenodo
+  month: 9
+  publisher:
+    name: Zenodo
   version: "v1.0"
   doi: 10.5281/zenodo.23004531
   url: "https://doi.org/10.5281/zenodo.23004531"
+  status: preprint
   notes: >-
     ICSA Paper 1 preprint. U.S. Provisional Application No. 64/163,500,
     filed September 27, 2026.
+references:
+  - type: patent
+    title: "Containing and Unwinding the Blast Radius of Agentic Workflows"
+    authors:
+      - family-names: Dhanaraj
+        given-names: Rinu
+        orcid: https://orcid.org/0009-0007-9082-8846
+    year: 2026
+    month: 9
+    date-published: "2026-09-27"
+    number: "64/163,500"
+    patent-states:
+      - "US"
+    location:
+      name: "United States Patent and Trademark Office"
+    notes: >-
+      U.S. Provisional Application No. 64/163,500, filed September 27, 2026.

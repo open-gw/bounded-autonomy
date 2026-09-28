@@ -1,0 +1,28 @@
+{
+  "title": "bounded-autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows",
+  "creators": [
+    {
+      "name": "Dhanaraj, Rinu",
+      "orcid": "0009-0007-9082-8846"
+    }
+  ],
+  "description": "Proof-of-concept measurement rig for the Bounded Autonomy paper: a one-node k3d cluster that evaluates per-task network segmentation, SPIFFE identity, and task-keyed lineage on a long-running multi-step agent workload. One profile (long-multistep), two modes (flat, full), five seeds, and four metric exporters (reach, credentials, rollback, overhead). This software artefact supplements the Paper 1 preprint.",
+  "upload_type": "software",
+  "license": "MIT",
+  "keywords": [
+    "bounded-autonomy",
+    "agentic-workflows",
+    "blast-radius",
+    "cilium",
+    "spiffe",
+    "icsa-artefact"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.23004531",
+      "relation": "isSupplementTo",
+      "scheme": "doi",
+      "resource_type": "publication-preprint"
+    }
+  ]
+}
