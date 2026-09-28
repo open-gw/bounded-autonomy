@@ -1,5 +1,5 @@
 # Citation File Format 1.2.0 — Paper 1 / bounded-autonomy artefact.
-# Cite this repository until an arXiv DOI exists (README).
+# Cite the Zenodo preprint (publication DOI). No GitHub/Zenodo repository DOI yet.
 cff-version: 1.2.0
 message: If you use this Paper 1 artefact, please cite it using these metadata.
 type: software
@@ -13,8 +13,13 @@ authors:
   - family-names: Dhanaraj
     given-names: Rinu
     orcid: https://orcid.org/0009-0007-9082-8846
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23004531
+  - type: url
+    value: "https://doi.org/10.5281/zenodo.23004531"
 repository-code: "https://github.com/open-gw/bounded-autonomy"
-url: "https://github.com/open-gw/bounded-autonomy"
+url: "https://doi.org/10.5281/zenodo.23004531"
 license: MIT
 keywords:
   - bounded-autonomy
@@ -26,14 +31,17 @@ keywords:
 version: "1.0.0"
 date-released: "2026-09-21"
 preferred-citation:
-  type: software
-  title: "bounded-autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
+  type: article
+  title: "Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows"
   authors:
     - family-names: Dhanaraj
       given-names: Rinu
       orcid: https://orcid.org/0009-0007-9082-8846
   year: 2026
-  url: "https://github.com/open-gw/bounded-autonomy"
+  publisher: Zenodo
+  version: "v1.0"
+  doi: 10.5281/zenodo.23004531
+  url: "https://doi.org/10.5281/zenodo.23004531"
   notes: >-
-    ICSA Paper 1 artefact. U.S. Provisional Application No. 64/163,500,
-    filed September 27, 2026. DOI pending Zenodo/arXiv posting.
+    ICSA Paper 1 preprint. U.S. Provisional Application No. 64/163,500,
+    filed September 27, 2026.

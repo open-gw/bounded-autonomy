@@ -4,7 +4,7 @@ Containing and Unwinding the Blast Radius of Agentic Workflows — Paper 1 artef
 
 One-node k3d rig. One profile (`long-multistep`). Two modes (`flat`, `full`). Five seeds. Four metric exporters. Nothing from Paper 2 is in this repository.
 
-Cite this repository via [`CITATION.cff`](CITATION.cff) until a Zenodo or arXiv DOI exists. Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md).
+Preprint DOI: [https://doi.org/10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531) (no repository DOI yet). Citation: Dhanaraj, R. (2026). Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows (Version v1.0). Zenodo. https://doi.org/10.5281/zenodo.23004531. See [`CITATION.cff`](CITATION.cff). Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md).
 
 ## Patent notice
 

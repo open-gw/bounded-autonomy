@@ -1,6 +1,6 @@
 # Zenodo upload checklist (Paper 1 preprint)
 
-Recorded 27 September 2026. No DOI is minted here: there is no `ZENODO_TOKEN` in the environment, no `zenodo` CLI, and this agent cannot complete the authenticated UI publish.
+Recorded 27–28 September 2026. Preprint published: **https://doi.org/10.5281/zenodo.23004531**. There is no GitHub/Zenodo repository DOI yet; do not invent a second DOI.
 
 **Source PDF (do not invent):**
 `/Users/rinudhanaraj/Downloads/EB1A/Bounded Autonomy/USPTO Bounded Autonomy/bounded-autonomy-icsa-preview.pdf`
@@ -21,7 +21,7 @@ Recorded 27 September 2026. No DOI is minted here: there is no `ZENODO_TOKEN` in
 
 Autonomous agents that invoke tools and access data on behalf of users introduce a class of failure that existing access control does not address: an authenticated, in-policy agent that drifts from its delegated task or is redirected by the content it reads. Current controls decide whether a call may start. They do not bound how far a compromised or drifting agent can reach, nor do they record what it accessed in a form that supports reversal. This paper presents a reference architecture for the execution plane of agentic systems, comprising three components: per-task network segmentation derived from the tool set an agent declares before execution, enforcement and observation of the resulting reachable set, and task-keyed lineage that tags every read and write with the identity of the delegating task across heterogeneous stores. We define four measurable properties of such a system: reachable-set size weighted by data sensitivity, the ratio of credential lifetime to task duration, rollback completeness reported by write class, and verification overhead per delegation hop. We describe a proof-of-concept implementation on Kubernetes using Cilium, SPIRE and OpenLineage, and evaluate it on a long-running multi-step workload under injected drift, reporting each property with and without the controls. The architecture is independent of any particular agent framework or gateway, and the metrics are intended to serve as a common basis for comparing containment approaches.
 
-10. Publish. Note the **version DOI** (`10.5281/zenodo.…`). Put it in `README.md` and `CITATION.cff`. Do not invent a DOI.
+10. Published. Version DOI **10.5281/zenodo.23004531** is in `README.md` and `CITATION.cff`.
 
 ## GitHub webhook (repository DOI)
 
@@ -30,9 +30,9 @@ Autonomous agents that invoke tools and access data on behalf of users introduce
 3. Cut GitHub release `v1.0-paper1` pointing at this Paper 1 artefact. The webhook then mints a software/repository DOI (often `10.5281/zenodo.XXXX`).
 4. Record that repository DOI separately from the preprint DOI.
 
-Status 27 September 2026:
+Status 28 September 2026:
 
 - GitHub repository is **public**: https://github.com/open-gw/bounded-autonomy
 - Release **`v1.0-paper1`**: https://github.com/open-gw/bounded-autonomy/releases/tag/v1.0-paper1
-- No `ZENODO_TOKEN` / `zenodo` CLI. Zenodo `/account/settings/github/` required a fresh login from this machine. Enable `open-gw/bounded-autonomy` there (UI click), then the webhook can mint a repository DOI. Do not invent a DOI.
-- Preprint deposit (Publication → Preprint, steps 1–10 above) is still unpublished.
+- Preprint DOI (Publication → Preprint, version v1.0): **https://doi.org/10.5281/zenodo.23004531**. Recorded in `README.md` and `CITATION.cff`.
+- No GitHub/Zenodo **repository** DOI. Enable `open-gw/bounded-autonomy` at Zenodo `/account/settings/github/` (UI click), then the webhook can mint a software/repository DOI. Do not invent a second DOI.
