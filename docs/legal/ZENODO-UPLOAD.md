@@ -30,4 +30,9 @@ Autonomous agents that invoke tools and access data on behalf of users introduce
 3. Cut GitHub release `v1.0-paper1` pointing at this Paper 1 artefact. The webhook then mints a software/repository DOI (often `10.5281/zenodo.XXXX`).
 4. Record that repository DOI separately from the preprint DOI.
 
-Blocked on 27 September 2026: `gh` keyring tokens for `rinu-dhanaraj` and `rinugd` are invalid; no `ZENODO_TOKEN`.
+Status 27 September 2026:
+
+- GitHub repository is **public**: https://github.com/open-gw/bounded-autonomy
+- Release **`v1.0-paper1`**: https://github.com/open-gw/bounded-autonomy/releases/tag/v1.0-paper1
+- No `ZENODO_TOKEN` / `zenodo` CLI. Zenodo `/account/settings/github/` required a fresh login from this machine. Enable `open-gw/bounded-autonomy` there (UI click), then the webhook can mint a repository DOI. Do not invent a DOI.
+- Preprint deposit (Publication → Preprint, steps 1–10 above) is still unpublished.
