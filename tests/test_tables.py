@@ -5,11 +5,13 @@ from pathlib import Path
 from tables import (
     ProvenanceError,
     assert_cluster_provenance,
+    emit_evasion_latex,
     emit_latex,
     emit_markdown,
     load_results,
     main as analyse_main,
     source_caption,
+    table_evasion,
     table_overhead,
     table_reach,
     table_rollback,
@@ -248,3 +250,55 @@ def test_paper_tables_sweep_writes_tex(tmp_path):
     assert r"$k$" in tex
     assert "source=cluster" in tex
     assert not (tmp_path / "out" / "tables.tex").exists()
+
+
+def _evasion_matrix(mode: str) -> list[dict]:
+    if mode == "full":
+        verdicts = ["allowed", "refused", "refused", "refused", "refused", "refused", "refused"]
+    else:
+        verdicts = ["allowed", "allowed", "allowed", "host-refused", "host-refused", "allowed", "allowed"]
+    probes = [
+        "direct_ip_declared",
+        "direct_ip_undeclared",
+        "dns",
+        "external_https",
+        "node_metadata",
+        "kubernetes_api",
+        "kubelet",
+    ]
+    return [
+        {"row": i + 1, "probe": probes[i], "verdict": verdicts[i], "latency_ms": 1.0}
+        for i in range(7)
+    ]
+
+
+def test_paper_tables_evasion(tmp_path):
+    import json
+
+    for name, mode, n_verify in (("full-run", "full", 29), ("flat-run", "flat", 30)):
+        run_dir = _cluster_run(tmp_path / mode, name, mode, n_verify)
+        doc = json.loads((run_dir / "result.json").read_text())
+        doc["evasion_matrix"] = _evasion_matrix(mode)
+        doc["artefacts"] = {"evasion": "evasion.parquet"}
+        (run_dir / "result.json").write_text(json.dumps(doc))
+    rc = analyse_main(
+        [
+            "--results",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--format",
+            "latex",
+            "--table",
+            "evasion",
+        ]
+    )
+    assert rc == 0
+    tex = (tmp_path / "out" / "evasion.tex").read_text()
+    assert "% --- Evasion ---" in tex
+    assert "source=cluster" in tex
+    assert "allowed (1/1)" in tex
+    md = table_evasion(load_results(tmp_path))
+    assert "| 1 |" in md and "direct-IP" in md
+    assert "host-refused" in md
+    assert "1.1.1.1" in emit_evasion_latex(load_results(tmp_path)) or "external" in md

@@ -90,6 +90,7 @@ for seed in 1 2 3 4 5; do
 done
 make analyse       # exits 1 unless every result.json has source=cluster
 make paper-tables  # LaTeX rows; same provenance gate
+make paper-tables TABLE=evasion  # 7-row evasion matrix; same gate
 make down
 ```
 

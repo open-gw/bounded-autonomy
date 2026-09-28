@@ -1,0 +1,29 @@
+apiVersion: bounded-autonomy.io/v1
+kind: RunManifest
+metadata:
+  run_id: data-intensive-full-seed1
+  created: "2026-09-28T00:00:00Z"
+spec:
+  profile: data-intensive
+  mode: full
+  seed: 1
+  steps: 20
+  expected_duration_seconds: 1800
+  write_mix:
+    idempotent: 0.2
+    versioned: 0.3
+    derived: 0.4
+    irreversible: 0.1
+  services:
+    declared: [records, docs, search, notify]
+    undeclared: [billing, analytics, audit, catalog]
+  injection:
+    enabled: true
+    at_step: 3
+    undeclared_service: billing
+    undeclared_store: minio
+    payload_version: v-data
+  cluster:
+    name: bounded-autonomy
+    node_count: 1
+  granularity: task

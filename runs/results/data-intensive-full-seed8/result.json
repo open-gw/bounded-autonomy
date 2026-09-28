@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "data-intensive-full-seed8",
+  "profile": "data-intensive",
+  "mode": "full",
+  "seed": 8,
+  "started_at": "2026-09-28T05:28:42.729468Z",
+  "finished_at": "2026-09-28T05:28:43.245241Z",
+  "wall_clock_seconds": 0.5157732963562012,
+  "source": "cluster",
+  "declaration": {
+    "task_id": "data-intensive-full-seed8",
+    "spiffe_id": "spiffe://rig/task/data-intensive-full-seed8",
+    "services": [
+      "records",
+      "docs",
+      "search",
+      "notify"
+    ],
+    "expected_duration_seconds": 1800,
+    "granularity": "task"
+  },
+  "steps_completed": 20,
+  "write_counts": {
+    "idempotent": 4,
+    "versioned": 6,
+    "derived": 8,
+    "irreversible": 2
+  },
+  "metrics": {
+    "reachable_set_size": 4,
+    "reachable_services": [
+      "docs",
+      "notify",
+      "records",
+      "search"
+    ],
+    "reachable_weight": 10,
+    "credential_ratio": 8312.722083733384,
+    "credential_ratio_derivation": {
+      "formula": "credential_ratio = tau_seconds / T_seconds",
+      "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+      "tau_seconds": 1800.0,
+      "T_seconds": 0.2165355682373047,
+      "credential_kind": "jwt-svid"
+    },
+    "tau_seconds": 1800.0,
+    "T_seconds": 0.2165355682373047,
+    "tau_issued_epoch": 1790573320.0,
+    "tau_not_after_epoch": 1790575120.0,
+    "T_start_epoch": 1790573552.525711,
+    "T_end_epoch": 1790573552.7422466,
+    "residual_svid_seconds": 1796.6151931285858,
+    "residual_policy_seconds": 2.247662305831909,
+    "entry_deleted_at_epoch": 1790573411.274965,
+    "policy_removed_at_epoch": 1790573325.6324692,
+    "task_end_epoch": 1790573323.3848069,
+    "credential_kind": "jwt-svid",
+    "rollback_completeness": {
+      "idempotent": {
+        "rho_rev": 1.0,
+        "n": 4,
+        "restored": 4,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
+      },
+      "versioned": {
+        "rho_rev": 1.0,
+        "n": 6,
+        "restored": 6,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
+      },
+      "derived": {
+        "rho_rev": null,
+        "n": 8,
+        "quarantined": 8,
+        "rho_enum": 1.0,
+        "rho_quarantined": 1.0,
+        "rho_escalated": 0.0
+      },
+      "irreversible": {
+        "rho_rev": 0.0,
+        "n": 2,
+        "escalated": 2,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 1.0
+      }
+    },
+    "rho_enum": 1.0,
+    "verification_overhead": {
+      "absolute_seconds": 0.0009074579999999999,
+      "relative": null,
+      "verify_ms": 0.9074579999999999,
+      "total_ms": 217.442917
+    },
+    "segment_p_ms": 3275.768995285034,
+    "segment_q_ms": 2247.662305831909,
+    "step_ratio_mean": null,
+    "step_ratio_max": null,
+    "d_ms_mean": 3275.768995285034,
+    "d_ms_max": 3275.768995285034,
+    "breach_services": [
+      "docs"
+    ],
+    "breach_intersection": [
+      "docs"
+    ],
+    "breach_intersection_size": 1
+  },
+  "policy_propagation_ms": [
+    3275.768995285034
+  ],
+  "artefacts": {
+    "probe": "probe.parquet",
+    "flows": "flows.parquet",
+    "spans": "spans.parquet",
+    "lineage": "lineage.parquet",
+    "groundtruth": "groundtruth.parquet",
+    "svid": "svid.parquet",
+    "evasion": "evasion.parquet",
+    "gateway": "gateway.parquet"
+  },
+  "evasion_matrix": [
+    {
+      "row": 1,
+      "probe": "direct_ip_declared",
+      "target": "10.42.0.48:8081 (records pod)",
+      "verdict": "allowed",
+      "latency_ms": 0.5876250215806067,
+      "detail": "bypass Service name; connect to pod IP of records"
+    },
+    {
+      "row": 2,
+      "probe": "direct_ip_undeclared",
+      "target": "10.42.0.106:8082 (docs pod)",
+      "verdict": "allowed",
+      "latency_ms": 0.38758304435759783,
+      "detail": "pod IP of undeclared docs"
+    },
+    {
+      "row": 3,
+      "probe": "dns",
+      "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
+      "verdict": "allowed",
+      "latency_ms": 2009.0936259948649,
+      "detail": "coredns_undeclared=allowed ips=['10.43.249.247']; udp53_1.1.1.1=refused"
+    },
+    {
+      "row": 4,
+      "probe": "external_https",
+      "target": "1.1.1.1:443",
+      "verdict": "refused",
+      "latency_ms": 2002.8650839813054,
+      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
+    },
+    {
+      "row": 5,
+      "probe": "node_metadata",
+      "target": "169.254.169.254:80",
+      "verdict": "refused",
+      "latency_ms": 2003.3655429724604,
+      "detail": "link-local cloud metadata; k3d has no IMDS"
+    },
+    {
+      "row": 6,
+      "probe": "kubernetes_api",
+      "target": "kubernetes.default.svc:443+10.43.0.1",
+      "verdict": "refused",
+      "latency_ms": 2008.7983350385912,
+      "detail": "dns=error; tcp_name=skipped; tcp_clusterip=refused"
+    },
+    {
+      "row": 7,
+      "probe": "kubelet",
+      "target": "172.18.0.3:10250",
+      "verdict": "refused",
+      "latency_ms": 2004.907791968435,
+      "detail": "node InternalIP kubelet"
+    }
+  ]
+}

@@ -152,9 +152,14 @@ def fetch_spans(
     queries = [
         f'{{ span.task_id="{task_id}" }}',
         f'{{ name="verify" && span.task_id="{task_id}" }}',
-        '{ name="verify" }',
-        '{ name="run" }',
     ]
+    if min_verify <= 2:
+        queries.extend(
+            [
+                '{ name="verify" }',
+                '{ name="run" }',
+            ]
+        )
     last = pd.DataFrame()
     now = int(time.time())
     if end is None:
@@ -187,7 +192,7 @@ def fetch_spans(
         rows = [r for r in rows if _in_window(r, start, end)]
         verify = [r for r in rows if r["name"] == "verify"]
         last = pd.DataFrame(rows)
-        if len(verify) >= min_verify:
+        if len(verify) >= max(2, int(min_verify)):
             return last
         time.sleep(pause)
     return last
