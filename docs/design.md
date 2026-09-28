@@ -9,7 +9,8 @@ TaskDeclaration CRD  →  segment controller (kopf)
                      →  CiliumNetworkPolicy (egress to declared services only,
                         ingress to those services only from the task-id label)
                      →  standalone SPIRE registration  spiffe://rig/task/<task-id>
-                     →  SVID TTL = declaration.expected_duration_seconds
+                     →  JWT-SVID TTL = declaration.expected_duration_seconds
+                        (step: expected_step_duration_seconds); X.509 is pod-level
 ```
 
 Default-deny on the agent pod; per-service ingress CNPs on declared tools (task-id label). A namespace-wide deny isolates stores from their tool servers. Deleting the CRD, or TTL expiry, removes the CNP. `step` granularity is a narrowed declaration update that replaces the CNP.
@@ -28,7 +29,7 @@ Eight services (`rig/services.yaml`). The agent talks only to MCP tool servers. 
 
 ## Identity
 
-SPIRE server + agent (standalone, not Cilium-bundled). One SVID per task, not per pod. Two sequential tasks on the same pod receive two SPIFFE IDs and two segments. An expired SVID fails the `verify` audience check without terminating the pod.
+SPIRE server + agent (standalone, not Cilium-bundled). Task credentials are JWT-SVIDs (`τ = exp − iat`). X.509 SVIDs are pod-level workload identity only. Two sequential tasks on the same pod receive two SPIFFE IDs and two segments; a held-open TCP across relabel is a label-race (findings 25). An expired JWT-SVID fails the `verify` audience check without terminating the pod. Registration-entry deletion at task end is not revocation.
 
 Cilium selects the segment on `bounded-autonomy.io/task-id`, which the controller binds to the task SVID. Cilium mutual authentication is Paper 2. See `docs/NEW-MATTER.md`.
 
@@ -42,6 +43,8 @@ Cilium selects the segment on `bounded-autonomy.io/task-id`, which the controlle
 | OpenLineage → Marquez (outside every segment) | `lineage.parquet` | `rollback_completeness`, `rho_enum` |
 | WAL / bucket notification / oplog subscribers | `groundtruth.parquet` | `rollback_completeness`, `rho_enum` |
 | SPIRE issue/expiry log | `svid.parquet` | `credential_ratio` |
+| Evasion probes from the agent pod | `evasion.parquet` | evasion matrix (Task 23) |
+| Evasion probes from the agent pod | `evasion.parquet` | evasion matrix (Task 23) |
 
 ## Span naming
 

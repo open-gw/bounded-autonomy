@@ -111,6 +111,7 @@ data:
       log_level = "INFO"
       ca_ttl = "24h"
       default_x509_svid_ttl = "1h"
+      default_jwt_svid_ttl = "5m"
       socket_path = "/run/spire/sockets/server.sock"
     }
     plugins {

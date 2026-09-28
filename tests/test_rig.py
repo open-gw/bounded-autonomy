@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from controller.cnp import TASK_LABEL, render_cnp, render_spire_entry, spiffe_for
+from controller.cnp import TASK_LABEL, dns_allow_names, render_cnp, render_spire_entry, spiffe_for
 from harness.simulator import run_local
 from lineage.emitter import emit_run_event, spiffe_task_id
 from plan import WRITE_CLASSES, build_step_plan, counts_from_mix
@@ -54,6 +54,23 @@ def test_cnp_allows_only_declared_services():
             dests.append(labels["app.kubernetes.io/name"])
     assert dests[:3] == ["records", "search", "notify"]
     assert "otel-collector" in dests
+    assert egress["spec"]["enableDefaultDeny"] == {"egress": True}
+    dns_rules = []
+    for rule in egress["spec"]["egress"]:
+        for port in rule.get("toPorts") or []:
+            dns_rules.extend((port.get("rules") or {}).get("dns") or [])
+    names = [item["matchName"] for item in dns_rules]
+    allowed = set(dns_allow_names(["records", "search", "notify"]))
+    gateway_dns = {
+        "apisix-gateway",
+        "apisix-gateway.apisix",
+        "apisix-gateway.apisix.svc",
+        "apisix-gateway.apisix.svc.cluster.local",
+    }
+    assert set(names) == allowed | gateway_dns
+    assert "docs.rig.svc.cluster.local" not in names
+    assert "kubernetes.default.svc.cluster.local" not in names
+    assert not any(item.get("matchPattern") for item in dns_rules)
     ports = [
         rule["toPorts"][0]["ports"][0]["port"]
         for rule in egress["spec"]["egress"]
@@ -69,12 +86,18 @@ def test_cnp_allows_only_declared_services():
             for rule in ingress["spec"]["ingress"]
             for ep in rule["fromEndpoints"]
         ]
-        assert all(sel.get(TASK_LABEL) == "t1" for sel in selectors)
+        assert any(sel.get(TASK_LABEL) == "t1" for sel in selectors)
+        assert all(sel.get(TASK_LABEL) == "t1" for sel in selectors if TASK_LABEL in sel)
         for rule in ingress["spec"]["ingress"]:
             assert "authentication" not in rule
     entry = render_spire_entry(spec, "spiffe://rig/spire/agent")
     assert entry["spiffe_id"] == spiffe_for("t1")
-    assert entry["x509_svid_ttl"] == 60
+    assert entry["x509_svid_ttl"] == 3600
+    assert entry["jwt_svid_ttl"] == 60
+    step_spec = {**spec, "granularity": "step", "expectedStepDurationSeconds": 45}
+    step_entry = render_spire_entry(step_spec, "spiffe://rig/spire/agent")
+    assert step_entry["jwt_svid_ttl"] == 45
+    assert step_entry["x509_svid_ttl"] == 3600
 
 
 def test_task_facet_from_svid_not_header():
@@ -151,6 +174,19 @@ def test_rho_enum_detects_disabled_emitter(tmp_path: Path):
     )
     assert result["metrics"]["rho_enum"] is not None
     assert result["metrics"]["rho_enum"] < 1.0
+
+
+def test_local_full_tau_is_ttl_not_issue_to_delete(tmp_path: Path):
+    result = run_local(mode="full", seed=1, out_dir=tmp_path / "full", injection=False)
+    metrics = result["metrics"]
+    assert metrics["credential_kind"] == "jwt-svid"
+    assert metrics["tau_seconds"] == pytest.approx(1800.0)
+    assert metrics["T_seconds"] is not None and metrics["T_seconds"] < 60
+    assert metrics["credential_ratio"] == pytest.approx(1800.0 / metrics["T_seconds"])
+    assert metrics["residual_svid_seconds"] is not None
+    assert metrics["residual_svid_seconds"] > 1700
+    assert metrics["residual_policy_seconds"] is not None
+    assert "exp - iat" in metrics["credential_ratio_derivation"]["tau_definition"]
 
 
 def test_result_schema_on_local_run(tmp_path: Path):

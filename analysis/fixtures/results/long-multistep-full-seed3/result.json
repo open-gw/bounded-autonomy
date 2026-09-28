@@ -33,13 +33,26 @@
       "notify"
     ],
     "reachable_weight": 7,
-    "credential_ratio": 1.0,
-    "tau_seconds": 267.0,
+    "credential_ratio": 6.741573033707865,
+    "credential_ratio_derivation": {
+      "formula": "credential_ratio = tau_seconds / T_seconds",
+      "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+      "tau_seconds": 1800.0,
+      "T_seconds": 267.0,
+      "credential_kind": "jwt-svid"
+    },
+    "tau_seconds": 1800.0,
     "T_seconds": 267.0,
     "tau_issued_epoch": 1747440180.0,
-    "tau_not_after_epoch": 1747440447.0,
+    "tau_not_after_epoch": 1747441980.0,
     "T_start_epoch": 1747440180.0,
     "T_end_epoch": 1747440447.0,
+    "residual_svid_seconds": 1533.0,
+    "residual_policy_seconds": 0.008,
+    "entry_deleted_at_epoch": 1747440447.0,
+    "policy_removed_at_epoch": 1747440447.008,
+    "task_end_epoch": 1747440447.0,
+    "credential_kind": "jwt-svid",
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from controller.declaration import declared_names
+from identity.svid import POD_SPIFFE_ID, POD_X509_SVID_TTL_SECONDS, jwt_ttl_seconds
+from modes import GATEWAY_LABEL, GATEWAY_NS
+
 # Kubernetes label values cannot hold a SPIFFE ID. The controller writes this
 # label on the workload pod (no restart) so SPIRE and Cilium can select it.
 # Paper 1 CNP matches the label only; Cilium mTLS is Paper 2.
@@ -24,16 +28,36 @@ def spiffe_for(task_id: str) -> str:
     return f"spiffe://rig/task/{task_id}"
 
 
+def dns_allow_names(service_names: Iterable[str], extra: Iterable[str] = ("otel-collector",)) -> list[str]:
+    """FQDN + search-path variants CoreDNS and the stub resolver emit.
+
+    Restricted to declared tool services plus the collector the agent
+    already has an L4 allow for. Undeclared inventory names, kubernetes,
+    and the public Internet are not listed. Paper claim: DNS is CoreDNS
+    for declared names only.
+    """
+    names: list[str] = []
+    seen: set[str] = set()
+    for svc in [*service_names, *extra]:
+        for candidate in (
+            svc,
+            f"{svc}.rig",
+            f"{svc}.rig.svc",
+            f"{svc}.rig.svc.cluster.local",
+        ):
+            if candidate not in seen:
+                seen.add(candidate)
+                names.append(candidate)
+    return names
+
+
 def render_cnp(
     name: str,
     namespace: str,
     spec: dict[str, Any],
 ) -> dict[str, Any]:
     task_id = spec["taskId"]
-    services: Iterable[dict[str, str] | str] = spec["services"]
-    service_names = [
-        s["name"] if isinstance(s, dict) else s for s in services
-    ]
+    service_names = declared_names(spec)
     egress = [
         {
             "toEndpoints": [
@@ -63,8 +87,34 @@ def render_cnp(
             "toPorts": [{"ports": [{"port": "4318", "protocol": "TCP"}]}],
         }
     )
-    # DNS (no Cilium DNS-proxy rules: those hijack 53 and blackhole if the
-    # proxy is not ready). SPIRE uses a local agent socket, not this path.
+    # APISIX is the L7 hop in gateway-only and full. full + bypass still
+    # allows the gateway so the allow-list can be live while the agent
+    # talks ClusterIP (the undeclared call is then a CNP drop, not a 403).
+    egress.append(
+        {
+            "toEndpoints": [
+                {
+                    "matchLabels": {
+                        "app.kubernetes.io/name": GATEWAY_LABEL,
+                        "k8s:io.kubernetes.pod.namespace": GATEWAY_NS,
+                    }
+                }
+            ],
+            "toPorts": [{"ports": [{"port": "9080", "protocol": "TCP"}]}],
+        }
+    )
+    # DNS: CoreDNS only, declared names (plus otel-collector). Cilium
+    # DNS-proxy matchName — Task 16 used L4-only after the proxy blackholed
+    # lookups; this restore is required so undeclared FQDNs are refused.
+    # SPIRE uses a local agent socket, not this path.
+    dns_rules = [{"matchName": n} for n in dns_allow_names(service_names)]
+    for fqdn in (
+        "apisix-gateway",
+        "apisix-gateway.apisix",
+        "apisix-gateway.apisix.svc",
+        "apisix-gateway.apisix.svc.cluster.local",
+    ):
+        dns_rules.append({"matchName": fqdn})
     egress.append(
         {
             "toEndpoints": [
@@ -76,8 +126,10 @@ def render_cnp(
                 }
             ],
             "toPorts": [
-                {"ports": [{"port": "53", "protocol": "UDP"}]},
-                {"ports": [{"port": "53", "protocol": "TCP"}]},
+                {
+                    "ports": [{"port": "53", "protocol": "ANY"}],
+                    "rules": {"dns": dns_rules},
+                }
             ],
         }
     )
@@ -107,7 +159,13 @@ def render_cnp(
                 "ingress": [
                     {
                         "fromEndpoints": [
-                            {"matchLabels": {TASK_LABEL: task_id}}
+                            {"matchLabels": {TASK_LABEL: task_id}},
+                            {
+                                "matchLabels": {
+                                    "app.kubernetes.io/name": GATEWAY_LABEL,
+                                    "k8s:io.kubernetes.pod.namespace": GATEWAY_NS,
+                                }
+                            },
                         ],
                     }
                 ],
@@ -129,6 +187,7 @@ def render_cnp(
         "spec": {
             "description": f"segment for {spiffe_for(task_id)}",
             "endpointSelector": {"matchLabels": {TASK_LABEL: task_id}},
+            "enableDefaultDeny": {"egress": True},
             "egress": egress,
         },
     }
@@ -136,8 +195,8 @@ def render_cnp(
 
 
 def render_spire_entry(spec: dict[str, Any], parent_id: str) -> dict[str, Any]:
+    """Task registration: JWT-SVID TTL from the declaration; X.509 is pod-level."""
     task_id = spec["taskId"]
-    ttl = int(spec["expectedDurationSeconds"])
     return {
         "spiffe_id": spiffe_for(task_id),
         "parent_id": parent_id,
@@ -145,6 +204,20 @@ def render_spire_entry(spec: dict[str, Any], parent_id: str) -> dict[str, Any]:
             f"k8s:ns:{spec.get('namespace', 'rig')}",
             f"k8s:pod-label:{TASK_LABEL}:{task_id}",
         ],
-        "x509_svid_ttl": ttl,
-        "jwt_svid_ttl": ttl,
+        "x509_svid_ttl": POD_X509_SVID_TTL_SECONDS,
+        "jwt_svid_ttl": jwt_ttl_seconds(spec),
+    }
+
+
+def render_pod_spire_entry(parent_id: str, namespace: str = "rig") -> dict[str, Any]:
+    """X.509 workload identity for the agent pod. Not a task credential."""
+    return {
+        "spiffe_id": POD_SPIFFE_ID,
+        "parent_id": parent_id,
+        "selectors": [
+            f"k8s:ns:{namespace}",
+            "k8s:pod-label:app.kubernetes.io/name:agent",
+        ],
+        "x509_svid_ttl": POD_X509_SVID_TTL_SECONDS,
+        "jwt_svid_ttl": POD_X509_SVID_TTL_SECONDS,
     }

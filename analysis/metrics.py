@@ -56,11 +56,13 @@ def credential_ratio(
     svid_records: pd.DataFrame | Iterable[Mapping[str, Any]],
     spans: pd.DataFrame | Iterable[Mapping[str, Any]],
 ) -> float:
-    """τ / T. τ is credential lifetime, T is the OTel root-span duration.
+    """τ / T. τ is SVID TTL (exp − iat), T is the OTel root-span duration.
 
-    Epoch columns issued_at_epoch / not_after_epoch and a span named `run`
-    with start_epoch / end_epoch are preferred. Falls back to unique
-    SPIFFE IDs over unique task IDs when those columns are absent.
+    Epoch columns issued_at_epoch / not_after_epoch are the JWT-SVID (or
+    projected SA-token) iat/exp. τ is not issue-to-delete and not
+    registration-entry deletion. A span named `run` with start_epoch /
+    end_epoch is preferred for T. Falls back to unique SPIFFE IDs over
+    unique task IDs when those columns are absent.
     """
     svid_df = _frame(
         svid_records,
@@ -160,9 +162,19 @@ def rollback_completeness(
     for cls in WRITE_CLASSES:
         subset = gt_df[gt_df["write_class"] == cls] if not gt_df.empty else gt_df
         n = int(len(subset))
+        lin_c = writes_lin[writes_lin["write_class"] == cls] if not writes_lin.empty else writes_lin
+        n_lin_c = int(len(lin_c))
+        rho_enum_c: float | None = None if n == 0 else n_lin_c / n
         if cls in ("idempotent", "versioned"):
             if n == 0:
-                out[cls] = {"rho_rev": None, "n": 0, "restored": 0}
+                out[cls] = {
+                    "rho_rev": None,
+                    "n": 0,
+                    "restored": 0,
+                    "rho_enum": rho_enum_c,
+                    "rho_quarantined": 0.0,
+                    "rho_escalated": 0.0,
+                }
                 continue
             if "restored_matches_before" in subset.columns and subset[
                 "restored_matches_before"
@@ -173,18 +185,39 @@ def rollback_completeness(
                 restored = int(flag.astype(bool).sum())
             else:
                 restored = int((subset["attestation_action"] == "restored").sum())
-            out[cls] = {"rho_rev": restored / n, "n": n, "restored": restored}
+            out[cls] = {
+                "rho_rev": restored / n,
+                "n": n,
+                "restored": restored,
+                "rho_enum": rho_enum_c,
+                "rho_quarantined": 0.0,
+                "rho_escalated": 0.0,
+            }
         elif cls == "derived":
             quarantined = (
                 int((subset["attestation_action"] == "quarantined").sum()) if n else 0
             )
-            out[cls] = {"rho_rev": None, "n": n, "quarantined": quarantined}
+            out[cls] = {
+                "rho_rev": None,
+                "n": n,
+                "quarantined": quarantined,
+                "rho_enum": rho_enum_c,
+                "rho_quarantined": None if n == 0 else quarantined / n,
+                "rho_escalated": 0.0,
+            }
         else:
             escalated = (
                 int((subset["attestation_action"] == "escalated").sum()) if n else 0
             )
             rho = 0.0 if n else None
-            out[cls] = {"rho_rev": rho, "n": n, "escalated": escalated}
+            out[cls] = {
+                "rho_rev": rho,
+                "n": n,
+                "escalated": escalated,
+                "rho_enum": rho_enum_c,
+                "rho_quarantined": 0.0,
+                "rho_escalated": None if n == 0 else escalated / n,
+            }
     return out
 
 

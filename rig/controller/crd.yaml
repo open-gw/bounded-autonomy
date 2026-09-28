@@ -29,11 +29,16 @@ spec:
                 expectedDurationSeconds:
                   type: integer
                   minimum: 1
+                expectedStepDurationSeconds:
+                  type: integer
+                  minimum: 1
                 granularity:
                   type: string
                   enum: [task, step]
                 createdAt:
                   type: string
+                segmentEnabled:
+                  type: boolean
                 services:
                   type: array
                   items:

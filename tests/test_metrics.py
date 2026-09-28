@@ -130,11 +130,19 @@ def test_rollback_completeness_known_construction():
     gt = pd.DataFrame(rows)
     got = rollback_completeness(lineage, gt)
     assert got["rho_enum"] == 1.0
-    assert got["idempotent"] == {"rho_rev": 1.0, "n": 4, "restored": 4}
-    assert got["versioned"] == {"rho_rev": 1.0, "n": 3, "restored": 3}
+    assert got["idempotent"]["rho_rev"] == 1.0
+    assert got["idempotent"]["n"] == 4
+    assert got["idempotent"]["restored"] == 4
+    assert got["idempotent"]["rho_enum"] == 1.0
+    assert got["versioned"]["rho_rev"] == 1.0
+    assert got["versioned"]["n"] == 3
     assert got["derived"]["rho_rev"] is None
     assert got["derived"]["quarantined"] == 2
-    assert got["irreversible"] == {"rho_rev": 0.0, "n": 1, "escalated": 1}
+    assert got["derived"]["rho_quarantined"] == 1.0
+    assert got["irreversible"]["rho_rev"] == 0.0
+    assert got["irreversible"]["n"] == 1
+    assert got["irreversible"]["escalated"] == 1
+    assert got["irreversible"]["rho_escalated"] == 1.0
 
 
 def test_rho_enum_detects_missing_lineage():

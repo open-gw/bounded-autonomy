@@ -33,7 +33,7 @@ def _result(mode: str, seed: int) -> dict:
     relative = None if mode == "flat" else (total_ms - (3000.0 + seed * 50)) / (3000.0 + seed * 50)
     reachable = ALL if mode == "flat" else list(DECLARED)
     t0 = 1_747_440_000.0 + seed * 60
-    tau = 86_400.0 if mode == "flat" else wall
+    tau = 86_400.0 if mode == "flat" else 1800.0
     t1 = t0 + wall
     run_id = f"long-multistep-{mode}-seed{seed}"
     return {
@@ -64,12 +64,25 @@ def _result(mode: str, seed: int) -> dict:
             "reachable_services": reachable,
             "reachable_weight": 14 if mode == "flat" else 7,
             "credential_ratio": tau / wall,
+            "credential_ratio_derivation": {
+                "formula": "credential_ratio = tau_seconds / T_seconds",
+                "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+                "tau_seconds": tau,
+                "T_seconds": wall,
+                "credential_kind": "sa-token" if mode == "flat" else "jwt-svid",
+            },
             "tau_seconds": tau,
             "T_seconds": wall,
             "tau_issued_epoch": t0,
             "tau_not_after_epoch": t0 + tau,
             "T_start_epoch": t0,
             "T_end_epoch": t1,
+            "residual_svid_seconds": None if mode == "flat" else (t0 + tau) - t1,
+            "residual_policy_seconds": None if mode == "flat" else (5.0 + seed) / 1000.0,
+            "entry_deleted_at_epoch": None if mode == "flat" else t1,
+            "policy_removed_at_epoch": None if mode == "flat" else t1 + (5.0 + seed) / 1000.0,
+            "task_end_epoch": t1,
+            "credential_kind": "sa-token" if mode == "flat" else "jwt-svid",
             "rollback_completeness": {
                 "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
                 "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},

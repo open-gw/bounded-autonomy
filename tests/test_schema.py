@@ -10,7 +10,7 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
-from validate_manifest import extra_errors, load_inventory, validate_manifest
+from validate_manifest import extra_errors, extra_errors_result, load_inventory, validate_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFESTS = ROOT / "runs" / "manifests"
@@ -22,9 +22,36 @@ def _load_yaml(name: str) -> dict:
 
 
 def test_example_manifests_validate():
-    for name in ("long-multistep-flat.yaml", "long-multistep-full.yaml", "long-multistep-full-step.yaml"):
+    for name in (
+        "long-multistep-flat.yaml",
+        "long-multistep-full.yaml",
+        "long-multistep-full-step.yaml",
+        "long-multistep-k1-full.yaml",
+        "long-multistep-k3-full.yaml",
+        "long-multistep-k5-full.yaml",
+        "long-multistep-k7-full.yaml",
+        "data-intensive-full.yaml",
+        "long-multistep-gateway-only.yaml",
+        "long-multistep-gateway-bypass.yaml",
+        "long-multistep-full-bypass.yaml",
+    ):
         errors = validate_manifest(MANIFESTS / name)
         assert errors == [], errors
+
+
+def test_declared_count_must_match_declared_len():
+    doc = _load_yaml("long-multistep-k1-full.yaml")
+    doc["spec"]["services"]["declared_count"] = 3
+    errors = extra_errors(doc, load_inventory())
+    assert any("declared_count" in e for e in errors)
+
+
+def test_variant_must_match_frozen_declared_list():
+    doc = _load_yaml("long-multistep-k5-full.yaml")
+    doc["spec"]["services"]["declared"] = ["records", "search", "notify", "billing", "catalog"]
+    doc["spec"]["services"]["undeclared"] = ["docs", "analytics", "audit"]
+    errors = extra_errors(doc, load_inventory())
+    assert any("variant k5" in e for e in errors)
 
 
 def test_write_mix_must_sum_to_one():
@@ -103,13 +130,26 @@ def _result_template() -> dict:
             "reachable_set_size": 3,
             "reachable_services": ["notify", "records", "search"],
             "reachable_weight": 7,
-            "credential_ratio": 1.0,
-            "tau_seconds": 12.0,
+            "credential_ratio": 150.0,
+            "credential_ratio_derivation": {
+                "formula": "credential_ratio = tau_seconds / T_seconds",
+                "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+                "tau_seconds": 1800.0,
+                "T_seconds": 12.0,
+                "credential_kind": "jwt-svid",
+            },
+            "tau_seconds": 1800.0,
             "T_seconds": 12.0,
             "tau_issued_epoch": 1000.0,
-            "tau_not_after_epoch": 1012.0,
+            "tau_not_after_epoch": 2800.0,
             "T_start_epoch": 1000.0,
             "T_end_epoch": 1012.0,
+            "residual_svid_seconds": 1788.0,
+            "residual_policy_seconds": 0.363,
+            "entry_deleted_at_epoch": 1012.0,
+            "policy_removed_at_epoch": 1012.363,
+            "task_end_epoch": 1012.0,
+            "credential_kind": "jwt-svid",
             "rollback_completeness": {
                 "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
                 "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
@@ -142,6 +182,13 @@ def _result_template() -> dict:
     }
 
 
+def test_gateway_bypass_not_combinable_with_flat():
+    doc = _load_yaml("long-multistep-flat.yaml")
+    doc["spec"]["gateway_bypass"] = True
+    errors = extra_errors(doc, load_inventory())
+    assert any("gateway_bypass" in e for e in errors)
+
+
 def test_result_template_validates():
     validator = Draft202012Validator(RESULT_SCHEMA, format_checker=FormatChecker())
     validator.validate(_result_template())
@@ -157,5 +204,56 @@ def test_result_missing_metric_fails():
 def test_result_bad_spiffe_fails():
     doc = _result_template()
     doc["declaration"]["spiffe_id"] = "not-a-spiffe"
+    validator = Draft202012Validator(RESULT_SCHEMA)
+    assert list(validator.iter_errors(doc))
+
+
+def _evasion_matrix() -> list[dict]:
+    probes = [
+        "direct_ip_declared",
+        "direct_ip_undeclared",
+        "dns",
+        "external_https",
+        "node_metadata",
+        "kubernetes_api",
+        "kubelet",
+    ]
+    verdicts = ["allowed", "refused", "refused", "refused", "refused", "refused", "refused"]
+    return [
+        {
+            "row": i + 1,
+            "probe": probes[i],
+            "target": f"t{i}",
+            "verdict": verdicts[i],
+            "latency_ms": 1.5,
+            "detail": "",
+        }
+        for i in range(7)
+    ]
+
+
+def test_result_with_evasion_matrix_validates():
+    doc = _result_template()
+    doc["evasion_matrix"] = _evasion_matrix()
+    doc["artefacts"]["evasion"] = "evasion.parquet"
+    validator = Draft202012Validator(RESULT_SCHEMA, format_checker=FormatChecker())
+    validator.validate(doc)
+    assert extra_errors_result(doc) == []
+
+
+def test_evasion_matrix_wrong_length_fails_extra_schema():
+    doc = _result_template()
+    doc["evasion_matrix"] = _evasion_matrix()[:3]
+    doc["artefacts"]["evasion"] = "evasion.parquet"
+    errors = extra_errors_result(doc)
+    assert any("length" in e or "1–7" in e or "1-7" in e for e in errors)
+
+
+def test_evasion_bad_verdict_fails_schema():
+    doc = _result_template()
+    matrix = _evasion_matrix()
+    matrix[0]["verdict"] = "dropped"
+    doc["evasion_matrix"] = matrix
+    doc["artefacts"]["evasion"] = "evasion.parquet"
     validator = Draft202012Validator(RESULT_SCHEMA)
     assert list(validator.iter_errors(doc))

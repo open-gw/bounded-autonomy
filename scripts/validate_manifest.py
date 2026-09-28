@@ -1,4 +1,4 @@
-"""Validate a run manifest against schemas/manifest.schema.json plus extra-schema rules.
+"""Validate a run manifest or result.json against schemas/ plus extra-schema rules.
 
 Extra rules (study-design §1):
   * write_mix values sum to 1.0 within 1e-9
@@ -6,6 +6,8 @@ Extra rules (study-design §1):
   * the two sets are disjoint
   * injection.undeclared_service ∈ undeclared
   * injection.at_step ∈ 1..spec.steps
+  * services.declared_count, when set, equals len(declared)
+  * spec.variant kN, when set, matches |declared| and the frozen sweep list
 """
 
 from __future__ import annotations
@@ -19,10 +21,14 @@ import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "rig") not in sys.path:
+    sys.path.insert(0, str(ROOT / "rig"))
 SCHEMA_PATH = ROOT / "schemas" / "manifest.schema.json"
+RESULT_SCHEMA_PATH = ROOT / "schemas" / "result.schema.json"
 SERVICES_PATH = ROOT / "rig" / "services.yaml"
 WRITE_MIX_TOLERANCE = 1e-9
 WRITE_CLASSES = ("idempotent", "versioned", "derived", "irreversible")
+EVASION_VERDICTS = ("allowed", "refused", "error", "host-refused")
 
 
 def load_inventory() -> set[str]:
@@ -73,7 +79,123 @@ def extra_errors(doc: dict, inventory: set[str]) -> list[str]:
     if isinstance(at_step, int) and isinstance(steps, int):
         if not (1 <= at_step <= steps):
             errors.append(f"injection.at_step {at_step} not in 1..{steps}")
+
+    declared_count = services.get("declared_count")
+    if declared_count is not None and declared_count != len(declared):
+        errors.append(
+            f"services.declared_count {declared_count} != |declared|={len(declared)}"
+        )
+
+    profile = spec.get("profile")
+    if profile == "data-intensive":
+        if steps != 20:
+            errors.append(f"data-intensive requires spec.steps=20; got {steps}")
+        declared_need = {"records", "docs", "search"}
+        if not declared_need <= declared_set:
+            errors.append(
+                "data-intensive declared must include records, docs, search "
+                f"(postgres/minio/qdrant); got {declared}"
+            )
+        expected_mix = {
+            "idempotent": 0.2,
+            "versioned": 0.3,
+            "derived": 0.4,
+            "irreversible": 0.1,
+        }
+        for cls, want in expected_mix.items():
+            got = mix.get(cls)
+            try:
+                if got is None or abs(float(got) - want) > WRITE_MIX_TOLERANCE:
+                    errors.append(
+                        f"data-intensive write_mix.{cls} must be {want}; got {got}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"data-intensive write_mix.{cls} is not numeric: {got}")
+        at_step = injection.get("at_step")
+        if at_step != 3:
+            errors.append(f"data-intensive injection.at_step must be 3; got {at_step}")
+
+    variant = spec.get("variant")
+    if variant is not None:
+        from sweep import VARIANTS, undeclared as sweep_undeclared
+
+        expected = VARIANTS.get(variant)
+        if expected is None:
+            errors.append(f"unknown spec.variant {variant!r}")
+        else:
+            if declared != expected:
+                errors.append(
+                    f"spec.variant {variant} requires declared {expected}; got {declared}"
+                )
+            if declared_count is not None and declared_count != len(expected):
+                errors.append(
+                    f"spec.variant {variant} requires declared_count {len(expected)}"
+                )
+            expected_undeclared = sweep_undeclared(variant)
+            if undeclared != expected_undeclared:
+                errors.append(
+                    f"spec.variant {variant} requires undeclared {expected_undeclared}; "
+                    f"got {undeclared}"
+                )
+
+    if spec.get("gateway_bypass") and spec.get("mode") not in ("full", "gateway-bypass"):
+        errors.append(
+            "spec.gateway_bypass is only combinable with mode=full "
+            "(or redundant with mode=gateway-bypass)"
+        )
     return errors
+
+
+def extra_errors_result(doc: dict) -> list[str]:
+    errors: list[str] = []
+    matrix = doc.get("evasion_matrix")
+    if matrix is None:
+        return errors
+    if not isinstance(matrix, list):
+        return ["evasion_matrix must be an array"]
+    if len(matrix) != 7:
+        errors.append(f"evasion_matrix length {len(matrix)}, expected 7")
+    rows: list[int] = []
+    for i, item in enumerate(matrix):
+        if not isinstance(item, dict):
+            errors.append(f"evasion_matrix[{i}] is not an object")
+            continue
+        row = item.get("row")
+        if not isinstance(row, int) or not (1 <= row <= 7):
+            errors.append(f"evasion_matrix[{i}].row must be 1..7")
+        else:
+            rows.append(row)
+        verdict = item.get("verdict")
+        if verdict not in EVASION_VERDICTS:
+            errors.append(
+                f"evasion_matrix[{i}].verdict {verdict!r} not in {EVASION_VERDICTS}"
+            )
+        lat = item.get("latency_ms")
+        if not isinstance(lat, (int, float)) or float(lat) < 0:
+            errors.append(f"evasion_matrix[{i}].latency_ms must be >= 0")
+    if rows and sorted(rows) != list(range(1, 8)):
+        errors.append(f"evasion_matrix rows must be 1–7 unique; got {sorted(rows)}")
+    artefacts = doc.get("artefacts") or {}
+    if artefacts.get("evasion") != "evasion.parquet":
+        errors.append("artefacts.evasion must be 'evasion.parquet' when evasion_matrix is set")
+    return errors
+
+
+def validate_result(path: Path) -> list[str]:
+    try:
+        doc = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return [f"JSON parse error: {exc}"]
+    if not isinstance(doc, dict):
+        return ["result is not a mapping"]
+    schema = json.loads(RESULT_SCHEMA_PATH.read_text())
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    messages = [
+        f"{'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
+        for e in validator.iter_errors(doc)
+    ]
+    messages.extend(extra_errors_result(doc))
+    return messages
 
 
 def validate_manifest(path: Path) -> list[str]:
@@ -100,7 +222,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.manifest.is_file():
         print(f"not a file: {args.manifest}", file=sys.stderr)
         return 2
-    errors = validate_manifest(args.manifest)
+    name = args.manifest.name
+    if name == "result.json" or args.manifest.suffix == ".json":
+        errors = validate_result(args.manifest)
+    else:
+        errors = validate_manifest(args.manifest)
     if errors:
         print(f"INVALID {args.manifest}", file=sys.stderr)
         for err in errors:

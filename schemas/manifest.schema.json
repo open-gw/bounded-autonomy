@@ -39,11 +39,18 @@
         "cluster"
       ],
       "properties": {
-        "profile": { "const": "long-multistep" },
-        "mode": { "enum": ["flat", "full"] },
+        "profile": { "enum": ["long-multistep", "data-intensive"] },
+        "variant": { "enum": ["k1", "k3", "k5", "k7"] },
+        "mode": { "enum": ["flat", "full", "gateway-only", "gateway-bypass"] },
+        "gateway_bypass": { "type": "boolean" },
         "seed": { "type": "integer", "minimum": 0 },
-        "steps": { "type": "integer", "const": 30 },
+        "steps": { "type": "integer", "minimum": 1, "maximum": 30 },
         "expected_duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "expected_step_duration_seconds": {
           "type": "integer",
           "minimum": 1,
           "maximum": 86400
@@ -64,17 +71,18 @@
           "additionalProperties": false,
           "required": ["declared", "undeclared"],
           "properties": {
+            "declared_count": { "enum": [1, 3, 5, 7] },
             "declared": {
               "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
+              "minItems": 1,
+              "maxItems": 7,
               "uniqueItems": true,
               "items": { "type": "string", "minLength": 1 }
             },
             "undeclared": {
               "type": "array",
-              "minItems": 5,
-              "maxItems": 5,
+              "minItems": 1,
+              "maxItems": 7,
               "uniqueItems": true,
               "items": { "type": "string", "minLength": 1 }
             }

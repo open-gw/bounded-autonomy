@@ -12,7 +12,9 @@ from pathlib import Path
 import kopf
 import kubernetes
 
-from controller.cnp import TASK_LABEL, render_cnp, render_spire_entry, spiffe_for
+from controller.cnp import TASK_LABEL, render_cnp, render_pod_spire_entry, render_spire_entry, spiffe_for
+from controller.gateway import apply_gateway_routes
+from identity.svid import parse_entry_ids
 
 API = "bounded-autonomy.io"
 KIND = "taskdeclarations"
@@ -88,18 +90,44 @@ def _label_workload(task_id: str, namespace: str) -> None:
         core.patch_namespaced_pod(pod.metadata.name, namespace, body)
 
 
-def _spire_entry(spec: dict) -> None:
-    if os.environ.get("BA_SKIP_SPIRE") == "1":
-        return
-    parent = os.environ.get(
-        "BA_SPIRE_PARENT",
-        "spiffe://rig/spire/agent/k8s_psat/bounded-autonomy/k3d-bounded-autonomy-server-0",
-    )
-    entry = render_spire_entry(spec, parent)
+SPIRE_SOCKET = "/run/spire/sockets/server.sock"
+
+
+def _spire_exec(cmd: list[str]) -> str:
+    ns = os.environ.get("BA_SPIRE_NAMESPACE", "spire")
+    try:
+        from kubernetes.stream import stream
+
+        core = _core()
+        pods = core.list_namespaced_pod(
+            ns, label_selector="app.kubernetes.io/name=spire-server"
+        )
+        if not pods.items:
+            proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+            return (proc.stdout or "") + (proc.stderr or "")
+        return stream(
+            core.connect_get_namespaced_pod_exec,
+            pods.items[0].metadata.name,
+            ns,
+            command=cmd,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+            container="spire-server",
+        ) or ""
+    except Exception:
+        proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        return (proc.stdout or "") + (proc.stderr or "")
+
+
+def _spire_create(entry: dict) -> None:
     cmd = [
         "/opt/spire/bin/spire-server",
         "entry",
         "create",
+        "-socketPath",
+        SPIRE_SOCKET,
         "-spiffeID",
         entry["spiffe_id"],
         "-parentID",
@@ -111,29 +139,47 @@ def _spire_entry(spec: dict) -> None:
     ]
     for sel in entry["selectors"]:
         cmd.extend(["-selector", sel])
-    ns = os.environ.get("BA_SPIRE_NAMESPACE", "spire")
-    try:
-        from kubernetes.stream import stream
+    _spire_exec(cmd)
 
-        core = _core()
-        pods = core.list_namespaced_pod(
-            ns, label_selector="app.kubernetes.io/name=spire-server"
+
+def _spire_entry(spec: dict) -> None:
+    if os.environ.get("BA_SKIP_SPIRE") == "1":
+        return
+    parent = os.environ.get(
+        "BA_SPIRE_PARENT",
+        "spiffe://rig/spire/agent/k8s_psat/bounded-autonomy/k3d-bounded-autonomy-server-0",
+    )
+    _spire_create(render_pod_spire_entry(parent, spec.get("namespace", "rig")))
+    _spire_create(render_spire_entry(spec, parent))
+
+
+def _spire_delete_entry(spiffe_id: str) -> None:
+    """Remove the registration entry at task end. Not SVID revocation."""
+    if os.environ.get("BA_SKIP_SPIRE") == "1":
+        return
+    shown = _spire_exec(
+        [
+            "/opt/spire/bin/spire-server",
+            "entry",
+            "show",
+            "-socketPath",
+            SPIRE_SOCKET,
+            "-spiffeID",
+            spiffe_id,
+        ]
+    )
+    for entry_id in parse_entry_ids(shown):
+        _spire_exec(
+            [
+                "/opt/spire/bin/spire-server",
+                "entry",
+                "delete",
+                "-socketPath",
+                SPIRE_SOCKET,
+                "-entryID",
+                entry_id,
+            ]
         )
-        if not pods.items:
-            return
-        stream(
-            core.connect_get_namespaced_pod_exec,
-            pods.items[0].metadata.name,
-            ns,
-            command=cmd,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-            container="spire-server",
-        )
-    except Exception:
-        subprocess.run(cmd, check=False, capture_output=True, text=True)
 
 
 @kopf.on.startup()
@@ -148,11 +194,32 @@ def reconcile(spec: dict, name: str, namespace: str, logger: kopf.Logger, **_: o
     t0 = datetime.now(timezone.utc)
     task_id = spec["taskId"]
     _label_workload(task_id, namespace)
-    rendered = render_cnp(name, namespace, spec)
-    _apply_cnp(rendered["egress"])
-    for ingress in rendered["ingress"]:
-        _apply_cnp(ingress)
-    _spire_entry({**spec, "namespace": namespace})
+    if spec.get("segmentEnabled", True):
+        rendered = render_cnp(name, namespace, spec)
+        _apply_cnp(rendered["egress"])
+        for ingress in rendered["ingress"]:
+            _apply_cnp(ingress)
+        _spire_entry({**spec, "namespace": namespace})
+    try:
+        apply_gateway_routes(spec)
+        logger.info("APISIX uri-blocker applied for %s", task_id)
+    except Exception as exc:
+        logger.warning("APISIX allow-list update skipped: %s", exc)
+    if not spec.get("segmentEnabled", True):
+        t1 = datetime.now(timezone.utc)
+        record = {
+            "task_id": task_id,
+            "crd_event_at": t0.isoformat(),
+            "applied_at": t1.isoformat(),
+            "propagation_ms": (t1 - t0).total_seconds() * 1000,
+            "spiffe_id": spiffe_for(task_id),
+            "segment": False,
+        }
+        PROP_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with PROP_LOG.open("a") as fh:
+            fh.write(json.dumps(record) + "\n")
+        logger.info("gateway allow-list only for %s", task_id)
+        return record
     t1 = datetime.now(timezone.utc)
     record = {
         "task_id": task_id,
@@ -170,8 +237,10 @@ def reconcile(spec: dict, name: str, namespace: str, logger: kopf.Logger, **_: o
 
 @kopf.on.delete(API, "v1", KIND)
 def teardown(spec: dict, namespace: str, logger: kopf.Logger, **_: object) -> None:
-    _delete_cnps(spec["taskId"], namespace)
-    logger.info("segment removed for %s", spec["taskId"])
+    task_id = spec["taskId"]
+    _delete_cnps(task_id, namespace)
+    _spire_delete_entry(spiffe_for(task_id))
+    logger.info("segment and registration entry deleted for %s", task_id)
 
 
 @kopf.timer(API, "v1", KIND, interval=5.0)

@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "label-race",
+  "experiment": "label-race",
+  "source": "cluster",
+  "started_at": "2026-09-28T05:02:25.945433Z",
+  "finished_at": "2026-09-28T05:03:00.082201Z",
+  "pod": "agent",
+  "task_a": "label-race-a",
+  "task_b": "label-race-b",
+  "records_ip": "10.43.116.111",
+  "held_open_first_ok": true,
+  "held_open_survived": true,
+  "new_connection_after_relabel_ok": true,
+  "new_connection_after_relabel": "allowed",
+  "holder": {
+    "phase": "done",
+    "first_ok": true,
+    "held_open_survived": true,
+    "held_err": "",
+    "new_connection_ok": true,
+    "new_err": ""
+  },
+  "relabelled_at_epoch": 1790571779.650152,
+  "observed": "held-open TCP to records survived relabel A\u2192B",
+  "threat_to_validity": true,
+  "mitigation": "one pod per task; cluster driver deletes the agent pod between runs"
+}

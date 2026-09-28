@@ -15,6 +15,10 @@ from metrics import (
     verification_overhead,
 )
 try:
+    from identity.svid import residual_seconds
+except ImportError:
+    from rig.identity.svid import residual_seconds
+try:
     from weights import load_weights, reachable_weight as _rw
 except ImportError:
     from rig.weights import load_weights, reachable_weight as _rw
@@ -60,6 +64,8 @@ def compute_result(
     lineage = _read(run_dir / "lineage.parquet")
     groundtruth = _read(run_dir / "groundtruth.parquet")
     svid = _read(run_dir / "svid.parquet")
+    evasion = _read(run_dir / "evasion.parquet")
+    gateway = _read(run_dir / "gateway.parquet")
 
     reached = sorted(reachable_set(flows, probe))
     rb = rollback_completeness(lineage, groundtruth)
@@ -81,13 +87,70 @@ def compute_result(
     weight = meta.get("reachable_weight")
     if weight is None:
         weight = _rw(reached, load_weights())
+    breach = [str(s) for s in (meta.get("breach_services") or [])]
+    intersection = sorted(set(breach) & set(reached))
+    variant = meta.get("variant") or (meta.get("declaration") or {}).get("variant")
+    task_end = meta.get("task_end_epoch")
+    if task_end is None:
+        task_end = epochs["T_end_epoch"]
+    policy_removed = meta.get("policy_removed_at_epoch")
+    if (
+        meta.get("mode") == "full"
+        and policy_removed is None
+        and meta.get("segment_q_ms") is not None
+        and task_end is not None
+    ):
+        policy_removed = float(task_end) + float(meta["segment_q_ms"]) / 1000.0
+    entry_deleted = meta.get("entry_deleted_at_epoch")
+    cred_kind = "sa-token"
+    if not svid.empty and "credential_kind" in svid.columns and svid["credential_kind"].notna().any():
+        cred_kind = str(svid["credential_kind"].dropna().iloc[0])
+    residual: dict[str, float | None] = {
+        "residual_svid_seconds": None,
+        "residual_policy_seconds": None,
+    }
+    if meta.get("mode") == "full" and epochs["tau_not_after_epoch"] is not None and task_end is not None:
+        residual = residual_seconds(
+            exp=float(epochs["tau_not_after_epoch"]),
+            task_end=float(task_end),
+            policy_removed_at=None if policy_removed is None else float(policy_removed),
+        )
+    derivation = {
+        "formula": "credential_ratio = tau_seconds / T_seconds",
+        "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+        "tau_seconds": epochs["tau_seconds"],
+        "T_seconds": epochs["T_seconds"],
+        "credential_kind": cred_kind,
+    }
 
-    return {
+    try:
+        from observer.evasion import matrix_from_rows as _evasion_matrix
+    except ImportError:
+        from rig.observer.evasion import matrix_from_rows as _evasion_matrix
+
+    artefacts = {
+        "probe": "probe.parquet",
+        "flows": "flows.parquet",
+        "spans": "spans.parquet",
+        "lineage": "lineage.parquet",
+        "groundtruth": "groundtruth.parquet",
+        "svid": "svid.parquet",
+    }
+    evasion_matrix = None
+    if not evasion.empty:
+        artefacts["evasion"] = "evasion.parquet"
+        evasion_matrix = _evasion_matrix(evasion)
+    if not gateway.empty or (run_dir / "gateway.parquet").exists():
+        artefacts["gateway"] = "gateway.parquet"
+
+    result = {
         "schema_version": "1.0.0",
         "run_id": meta["run_id"],
         "profile": meta.get("profile", "long-multistep"),
         "mode": meta["mode"],
         "seed": meta["seed"],
+        **({"variant": variant} if variant else {}),
+        **({"gateway_bypass": True} if meta.get("gateway_bypass") else {}),
         "started_at": meta["started_at"],
         "finished_at": meta["finished_at"],
         "wall_clock_seconds": meta["wall_clock_seconds"],
@@ -100,12 +163,19 @@ def compute_result(
             "reachable_services": reached,
             "reachable_weight": int(weight),
             "credential_ratio": ratio,
+            "credential_ratio_derivation": derivation,
             "tau_seconds": epochs["tau_seconds"],
             "T_seconds": epochs["T_seconds"],
             "tau_issued_epoch": epochs["tau_issued_epoch"],
             "tau_not_after_epoch": epochs["tau_not_after_epoch"],
             "T_start_epoch": epochs["T_start_epoch"],
             "T_end_epoch": epochs["T_end_epoch"],
+            "residual_svid_seconds": residual["residual_svid_seconds"],
+            "residual_policy_seconds": residual["residual_policy_seconds"],
+            "entry_deleted_at_epoch": None if entry_deleted is None else float(entry_deleted),
+            "policy_removed_at_epoch": None if policy_removed is None else float(policy_removed),
+            "task_end_epoch": None if task_end is None else float(task_end),
+            "credential_kind": cred_kind,
             "rollback_completeness": rb,
             "rho_enum": rho_enum,
             "verification_overhead": overhead_out,
@@ -115,17 +185,22 @@ def compute_result(
             "step_ratio_max": None if not step_ratios else max(step_ratios),
             "d_ms_mean": None if not d_ms else sum(d_ms) / len(d_ms),
             "d_ms_max": None if not d_ms else max(d_ms),
+            **(
+                {
+                    "breach_services": breach,
+                    "breach_intersection": intersection,
+                    "breach_intersection_size": len(intersection),
+                }
+                if breach or variant or meta.get("mode") in ("gateway-only", "gateway-bypass") or meta.get("gateway_bypass")
+                else {}
+            ),
         },
         "policy_propagation_ms": meta.get("policy_propagation_ms", []),
-        "artefacts": {
-            "probe": "probe.parquet",
-            "flows": "flows.parquet",
-            "spans": "spans.parquet",
-            "lineage": "lineage.parquet",
-            "groundtruth": "groundtruth.parquet",
-            "svid": "svid.parquet",
-        },
+        "artefacts": artefacts,
     }
+    if evasion_matrix:
+        result["evasion_matrix"] = evasion_matrix
+    return result
 
 
 def dumps(result: dict[str, Any]) -> str:

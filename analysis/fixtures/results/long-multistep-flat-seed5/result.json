@@ -39,12 +39,25 @@
     ],
     "reachable_weight": 14,
     "credential_ratio": 338.8235294117647,
+    "credential_ratio_derivation": {
+      "formula": "credential_ratio = tau_seconds / T_seconds",
+      "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+      "tau_seconds": 86400.0,
+      "T_seconds": 255.0,
+      "credential_kind": "sa-token"
+    },
     "tau_seconds": 86400.0,
     "T_seconds": 255.0,
     "tau_issued_epoch": 1747440300.0,
     "tau_not_after_epoch": 1747526700.0,
     "T_start_epoch": 1747440300.0,
     "T_end_epoch": 1747440555.0,
+    "residual_svid_seconds": null,
+    "residual_policy_seconds": null,
+    "entry_deleted_at_epoch": null,
+    "policy_removed_at_epoch": null,
+    "task_end_epoch": 1747440555.0,
+    "credential_kind": "sa-token",
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,

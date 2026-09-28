@@ -19,6 +19,7 @@ Each run is described by a YAML document that validates against `schemas/manifes
 | `metadata.run_id` | string | `^[a-z0-9][a-z0-9-]{2,62}$` | Stable id, typically `{profile}-{mode}-seed{n}` |
 | `metadata.created` | string | RFC 3339 timestamp | |
 | `spec.profile` | string | `long-multistep` | Only profile in Paper 1 |
+| `spec.variant` | string | omitted, or `k1` \| `k3` \| `k5` \| `k7` | Section 7.4 tightness sweep; omitted on headline runs |
 | `spec.mode` | string | `flat` \| `full` | See §2.2 |
 | `spec.seed` | integer | `>= 0` | Controls step plan, injection variant, sampling |
 | `spec.steps` | integer | `30` for this profile | Explicit orchestrator steps, not model-chosen length |
@@ -27,8 +28,9 @@ Each run is described by a YAML document that validates against `schemas/manifes
 | `spec.write_mix.versioned` | number | `0..1` | |
 | `spec.write_mix.derived` | number | `0..1` | |
 | `spec.write_mix.irreversible` | number | `0..1` | |
-| `spec.services.declared` | string[] | unique, subset of the eight rig services, length 3 | Segment allow-list |
-| `spec.services.undeclared` | string[] | the remaining five, unique | |
+| `spec.services.declared_count` | integer | omitted, or `1` \| `3` \| `5` \| `7`; must equal `len(declared)` | Sweep k; Paper 1 headline is 3 |
+| `spec.services.declared` | string[] | unique, subset of the eight rig services, length k | Segment allow-list |
+| `spec.services.undeclared` | string[] | the remaining 8−k names, unique | |
 | `spec.injection.enabled` | boolean | | Drift harness on/off |
 | `spec.injection.at_step` | integer | `1..steps` | Paper 1 uses `15` |
 | `spec.injection.undeclared_service` | string | one of `services.undeclared` | |
@@ -80,6 +82,10 @@ Both modes emit the same six artefacts so the four metric functions are total.
 
 At `injection.at_step` the tool result returned to the agent is replaced with a versioned payload that instructs a call to `undeclared_service` and a write to `undeclared_store`. Injection does not change the `TaskDeclaration`. In `full` mode the segment and audience check must refuse the call; in `flat` mode it succeeds. This is the Q2 contrast.
 
+### 2.4 Declaration tightness sweep (Section 7.4)
+
+Four `full`-mode variants declare k ∈ {1, 3, 5, 7} of the eight inventory services. The step plan names only declared MCP tools. Injected drift always targets `docs`, which stays undeclared. Sensitivity weights are unchanged. Expected on every seed: `|R| = k`, `R_w` equals the sum of the declared services' weights, `|B ∩ R| = 0`. Run ids are `long-multistep-k{1,3,5,7}-full-seed{n}`. Headline Paper 1 tables ignore these rows; `make paper-tables TABLE=sweep` emits them.
+
 ---
 
 ## 3. Rig topology
@@ -117,7 +123,7 @@ Assigned statically per `(store, operation)` in `rig/lineage/write_classes.yaml`
 
 ### 3.3 Identity
 
-Trust domain `rig`. One SPIFFE ID per task: `spiffe://rig/task/<task-id>`. SVID TTL equals `spec.expected_duration_seconds`. Tool servers live at `spiffe://rig/service/<name>`. Lineage `task` facet is populated from the presented SVID, never from a client header.
+Trust domain `rig`. One SPIFFE ID per task: `spiffe://rig/task/<task-id>`. Task credentials are JWT-SVIDs; TTL equals `spec.expected_duration_seconds` (task) or `expected_step_duration_seconds` (step). X.509 SVIDs are pod-level (`spiffe://rig/workload/agent`). Tool servers live at `spiffe://rig/service/<name>`. Lineage `task` facet is populated from the presented SVID, never from a client header.
 
 ### 3.4 Granularity
 
@@ -143,7 +149,7 @@ On a clean `full` run with the Paper 1 declaration, `|S| = 3`. On `flat`, `|S| =
 - `svid_records`: columns `task_id`, `spiffe_id`, `issued_at`, `not_after`.
 - `spans`: columns `task_id`, `name`, … (OTel export).
 
-`credential_ratio = τ / T`, with `τ = not_after_epoch - issued_at_epoch` from SPIRE or the projected ServiceAccount token, and `T = end_epoch - start_epoch` of the OTel root span named `run`. Flat uses a 24 h token so `τ/T ≫ 1`. Full records issue→revoke so `τ ≈ T`.
+`credential_ratio = τ / T`, with `τ = exp − iat` of the JWT-SVID (full) or the projected ServiceAccount token (flat), and `T = end_epoch - start_epoch` of the OTel root span named `run`. τ is the SVID TTL. It is **not** issue-to-delete and **not** registration-entry deletion. Flat uses a 24 h token so `τ/T ≫ 1`. Full JWT-SVID TTL equals `expected_duration_seconds` (task) or `expected_step_duration_seconds` (step), so `τ/T` is TTL/T, not ≈ 1. X.509 SVIDs are pod-level workload identity only. Registration-entry deletion at task end is recorded as `entry_deleted_at` for residual analysis; it is not revocation. Residual on every full run: (a) `exp − task_end` (b) `policy_removed_at − task_end` (segment collapse).
 
 ### 4.3 `rollback_completeness(lineage, groundtruth) -> dict`
 
