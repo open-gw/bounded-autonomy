@@ -293,31 +293,38 @@ def _apply_undeclared_ingress_deny(task_id: str, declared: list[str]) -> None:
 
 
 def _apply_gateway_from_host(spec: dict[str, Any]) -> None:
-    port = _free_port()
-    proc = subprocess.Popen(
-        [
-            str(TOOLS / "kubectl"),
-            "--context",
-            CTX,
-            "-n",
-            GATEWAY_NS,
-            "port-forward",
-            "svc/apisix-admin",
-            f"{port}:9180",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    try:
-        _wait_tcp("127.0.0.1", port)
-        apply_gateway_routes(spec, base=f"http://127.0.0.1:{port}")
-    finally:
-        proc.terminate()
+    last_err: Exception | None = None
+    for _attempt in range(3):
+        port = _free_port()
+        proc = subprocess.Popen(
+            [
+                str(TOOLS / "kubectl"),
+                "--context",
+                CTX,
+                "-n",
+                GATEWAY_NS,
+                "port-forward",
+                "svc/apisix-admin",
+                f"{port}:9180",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+            _wait_tcp("127.0.0.1", port)
+            apply_gateway_routes(spec, base=f"http://127.0.0.1:{port}")
+            return
+        except RuntimeError as exc:
+            last_err = exc
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        time.sleep(0.5)
+    raise last_err or RuntimeError("port-forward apisix-admin did not become ready")
 
 
 def _pod_ip(pod: str) -> str:
@@ -607,7 +614,7 @@ def _free_port() -> int:
     return port
 
 
-def _wait_tcp(host: str, port: int, timeout: float = 20.0) -> None:
+def _wait_tcp(host: str, port: int, timeout: float = 45.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         sock = socket.socket()
@@ -1054,7 +1061,9 @@ def run_cluster(
     if profile == "data-intensive" and expected_verify:
         min_verify = max(2, expected_verify - 1)
     window_start = task_start - 5
-    deadline = time.time() + (120 if profile == "data-intensive" else 0)
+    # Collector can retry OTLP for tens of seconds after Tempo's ingester
+    # ring blips (127.0.0.1:9095). One 12s fetch_spans pass is not enough.
+    deadline = time.time() + (120 if profile == "data-intensive" else 90)
     time.sleep(3)
     spans = pd.DataFrame()
     n_verify = 0

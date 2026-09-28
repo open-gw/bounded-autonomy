@@ -19,9 +19,16 @@ data:
       trace:
         backend: local
         local:
-          path: /tmp/tempo
+          path: /var/tempo/blocks
         wal:
-          path: /tmp/tempo/wal
+          path: /var/tempo/wal
+    ingester:
+      lifecycler:
+        address: 127.0.0.1
+        ring:
+          kvstore:
+            store: inmemory
+          replication_factor: 1
     usage_report:
       reporting_enabled: false
 ---
@@ -55,10 +62,14 @@ spec:
             - name: cfg
               mountPath: /etc/tempo.yaml
               subPath: tempo.yaml
+            - name: data
+              mountPath: /var/tempo
       volumes:
         - name: cfg
           configMap:
             name: tempo
+        - name: data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
