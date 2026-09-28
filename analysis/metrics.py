@@ -258,7 +258,12 @@ def step_cost_split(
     probe_enabled: bool,
     tolerance_pct: float = 5.0,
 ) -> dict[str, Any]:
-    """Named clocks plus residual ``other_ms``; used when step_boundaries exist."""
+    """Per-boundary SVID / propagation / probe / other split.
+
+    ``other_ms`` is the residual of observed ``boundary_ms`` after the three
+    named clocks. Totals must reconcile with observed boundary duration
+    within ``tolerance_pct``.
+    """
     rows: list[dict[str, Any]] = []
     for raw in boundaries:
         prop = float(raw.get("propagation_ms") or 0.0)
@@ -296,7 +301,10 @@ def step_cost_split(
         + totals["other_ms"]
     )
     observed = totals["boundary_ms"]
-    error_pct = 0.0 if observed <= 0 else abs(accounted - observed) / observed * 100.0
+    if observed <= 0:
+        error_pct = 0.0
+    else:
+        error_pct = abs(accounted - observed) / observed * 100.0
     return {
         "probe_enabled": bool(probe_enabled),
         "boundaries": rows,

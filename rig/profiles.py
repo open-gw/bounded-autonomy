@@ -48,6 +48,27 @@ PROFILES: dict[str, dict[str, Any]] = {
         "three_store": True,
         "expected_duration_seconds": 1800,
     },
+    # Legitimate undeclared tool at step 15 (not drift). Orchestrator
+    # terminates, re-declares with the tool added, and resumes.
+    "redeclaration": {
+        "steps": 30,
+        "write_mix": {
+            "idempotent": 0.4,
+            "versioned": 0.3,
+            "derived": 0.2,
+            "irreversible": 0.1,
+        },
+        "declared": ["records", "search", "notify"],
+        "injection_at": 15,
+        "injection_service": "docs",
+        "injection_store": "minio",
+        "payload_version": "v1",
+        "three_store": False,
+        "expected_duration_seconds": 1800,
+        "injection_enabled": False,
+        "redeclare_at": 15,
+        "redeclare_tool": "docs",
+    },
 }
 
 

@@ -1,0 +1,29 @@
+apiVersion: bounded-autonomy.io/v1
+kind: RunManifest
+metadata:
+  run_id: redeclaration-full-seed1
+  created: "2026-09-28T00:00:00Z"
+spec:
+  profile: redeclaration
+  mode: full
+  seed: 1
+  steps: 30
+  expected_duration_seconds: 1800
+  write_mix:
+    idempotent: 0.4
+    versioned: 0.3
+    derived: 0.2
+    irreversible: 0.1
+  services:
+    declared: [records, search, notify]
+    undeclared: [docs, billing, analytics, audit, catalog]
+  injection:
+    enabled: false
+    at_step: 15
+    undeclared_service: docs
+    undeclared_store: minio
+    payload_version: v1
+  cluster:
+    name: bounded-autonomy
+    node_count: 1
+  granularity: task

@@ -6,16 +6,26 @@ runs do not depend on a network model. See docs/NEW-MATTER.md.
 
 from __future__ import annotations
 
-from plan import Step
+from plan import MCP_TOOLS, Step
 
 
 class UndeclaredTool(ValueError):
-    """Named so cluster/simulator imports succeed. Paper 1 pick_tool still raises ValueError."""
+    """Step plan names a tool that is not in the current declaration."""
 
-    def __init__(self, tool: str, instruction: str = ""):
+    def __init__(self, tool: str, instruction: str):
+        super().__init__(
+            f"instruction names undeclared tool {tool!r}: {instruction!r}"
+        )
         self.tool = tool
         self.instruction = instruction
-        super().__init__(f"undeclared tool {tool!r}: {instruction!r}")
+
+
+def named_tool(instruction: str, candidates: list[str] | None = None) -> str | None:
+    text = instruction.lower()
+    for name in candidates or list(MCP_TOOLS):
+        if name in text:
+            return name
+    return None
 
 
 def pick_tool(instruction: str, declared: list[str], last_result: dict | None) -> str:
@@ -23,6 +33,9 @@ def pick_tool(instruction: str, declared: list[str], last_result: dict | None) -
     for name in declared:
         if name in text:
             return name
+    named = named_tool(instruction)
+    if named and named not in declared:
+        raise UndeclaredTool(named, instruction)
     if last_result and last_result.get("forced_tool") in declared:
         return last_result["forced_tool"]
     raise ValueError(f"instruction does not name a declared tool: {instruction!r}")

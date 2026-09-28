@@ -9,7 +9,14 @@ import pandas as pd
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
-from controller.cnp import TASK_LABEL, dns_allow_names, render_cnp, render_spire_entry, spiffe_for
+from controller.cnp import (
+    TASK_LABEL,
+    dns_allow_names,
+    ports_for,
+    render_cnp,
+    render_spire_entry,
+    spiffe_for,
+)
 from harness.simulator import run_local
 from lineage.emitter import emit_run_event, spiffe_task_id
 from plan import WRITE_CLASSES, build_step_plan, counts_from_mix
@@ -104,6 +111,32 @@ def test_cnp_allows_only_declared_services():
     step_entry = render_spire_entry(step_spec, "spiffe://rig/spire/agent")
     assert step_entry["jwt_svid_ttl"] == 45
     assert step_entry["x509_svid_ttl"] == 3600
+
+
+def test_placeholder_cnp_allows_service_and_pod_port():
+    assert {p["port"] for p in ports_for("billing")} == {"8085", "80"}
+    assert {p["port"] for p in ports_for("records")} == {"8081"}
+    spec = {
+        "taskId": "t-k5",
+        "expectedDurationSeconds": 60,
+        "services": [
+            {"name": "records"},
+            {"name": "search"},
+            {"name": "notify"},
+            {"name": "billing"},
+            {"name": "analytics"},
+        ],
+    }
+    rendered = render_cnp("decl-k5", "rig", spec)
+    for svc, expected in (("billing", {"8085", "80"}), ("analytics", {"8086", "80"})):
+        ports = {
+            p["port"]
+            for rule in rendered["egress"]["spec"]["egress"]
+            if rule.get("toEndpoints")
+            and rule["toEndpoints"][0]["matchLabels"].get("app.kubernetes.io/name") == svc
+            for p in rule["toPorts"][0]["ports"]
+        }
+        assert ports == expected
 
 
 def test_task_facet_from_svid_not_header():

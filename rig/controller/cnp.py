@@ -22,6 +22,18 @@ SERVICE_PORTS = {
     "audit": "8087",
     "catalog": "8088",
 }
+# nginx placeholders listen on 80; Services are 8085–8088. Cilium toPorts
+# is evaluated after DNAT, so both the Service port and the pod port
+# must be listed or |R| stops at the three real tools.
+PLACEHOLDER_SERVICES = frozenset({"billing", "analytics", "audit", "catalog"})
+
+
+def ports_for(svc: str) -> list[dict[str, str]]:
+    service_port = SERVICE_PORTS.get(svc, "80")
+    ports = [{"port": service_port, "protocol": "TCP"}]
+    if svc in PLACEHOLDER_SERVICES and service_port != "80":
+        ports.append({"port": "80", "protocol": "TCP"})
+    return ports
 
 
 def spiffe_for(task_id: str) -> str:
@@ -68,9 +80,7 @@ def render_cnp(
                     }
                 }
             ],
-            "toPorts": [
-                {"ports": [{"port": SERVICE_PORTS.get(svc, "80"), "protocol": "TCP"}]}
-            ],
+            "toPorts": [{"ports": ports_for(svc)}],
         }
         for svc in service_names
     ]

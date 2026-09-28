@@ -197,3 +197,54 @@ def test_paper_tables_writes_tex_on_cluster_results(tmp_path):
     assert r"\begin{tabular}" in tex
     assert "% --- Reach ---" in tex
     assert "source=cluster" in tex
+
+
+def test_paper_tables_sweep_writes_tex(tmp_path):
+    import json
+
+    run_dir = _cluster_run(tmp_path, "long-multistep-k1-full-seed1", "full", 29)
+    doc = json.loads((run_dir / "result.json").read_text())
+    doc["variant"] = "k1"
+    doc["declaration"] = {
+        "granularity": "task",
+        "services": ["records"],
+        "declared_count": 1,
+        "variant": "k1",
+    }
+    doc["metrics"] = {
+        "reachable_set_size": 1,
+        "reachable_weight": 3,
+        "breach_intersection_size": 0,
+        "tau_seconds": 1.0,
+        "T_seconds": 1.0,
+        "credential_ratio": 1.0,
+        "segment_p_ms": 0.0,
+        "segment_q_ms": 0.0,
+        "d_ms_mean": 1.0,
+        "d_ms_max": 1.0,
+        "rollback_completeness": {
+            "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
+            "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
+            "derived": {"rho_rev": None, "n": 6, "quarantined": 6},
+            "irreversible": {"rho_rev": 0.0, "n": 3, "escalated": 3},
+        },
+        "verification_overhead": {"verify_ms": 2.0, "total_ms": 100.0, "relative": 0.0},
+    }
+    (run_dir / "result.json").write_text(json.dumps(doc))
+    rc = analyse_main(
+        [
+            "--results",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--format",
+            "latex",
+            "--table",
+            "sweep",
+        ]
+    )
+    assert rc == 0
+    tex = (tmp_path / "out" / "sweep.tex").read_text()
+    assert r"$k$" in tex
+    assert "source=cluster" in tex
+    assert not (tmp_path / "out" / "tables.tex").exists()
