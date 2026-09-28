@@ -92,59 +92,129 @@
   "evasion_matrix": [
     {
       "row": 1,
+      "id": "1",
       "probe": "direct_ip_declared",
-      "target": "10.42.0.48:8081 (records pod)",
+      "target": "10.42.0.184:8081 (records pod)",
       "verdict": "allowed",
-      "latency_ms": 1.9479579641483724,
-      "detail": "bypass Service name; connect to pod IP of records"
+      "latency_ms": 0.5695829750038683,
+      "detail": "bypass Service name; connect to pod IP of records",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 2,
+      "id": "2",
       "probe": "direct_ip_undeclared",
-      "target": "10.42.0.106:8082 (docs pod)",
+      "target": "10.42.0.105:8082 (docs pod)",
       "verdict": "refused",
-      "latency_ms": 2803.8632509997115,
-      "detail": "pod IP of undeclared docs"
+      "latency_ms": 2002.8134599560872,
+      "detail": "pod IP of undeclared docs",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 3,
-      "probe": "dns",
-      "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
+      "id": "3a",
+      "probe": "dns_coredns_undeclared",
+      "target": "docs.rig.svc.cluster.local",
       "verdict": "refused",
-      "latency_ms": 2618.1045009871013,
-      "detail": "coredns_undeclared=refused ips=[]; udp53_1.1.1.1=refused"
+      "latency_ms": 11.837041995022446,
+      "detail": "coredns_undeclared=refused ips=[]",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 4,
-      "probe": "external_https",
-      "target": "1.1.1.1:443",
+      "id": "3b",
+      "probe": "dns_udp53_external",
+      "target": "udp/53@1.1.1.1",
       "verdict": "refused",
-      "latency_ms": 2005.0212100031786,
-      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
+      "latency_ms": 2008.4445009706542,
+      "detail": "udp53_1.1.1.1=refused",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 5,
-      "probe": "node_metadata",
-      "target": "169.254.169.254:80",
+      "id": "4",
+      "probe": "external_https",
+      "target": "1.1.1.1:443",
       "verdict": "refused",
-      "latency_ms": 2001.9907509558834,
-      "detail": "link-local cloud metadata; k3d has no IMDS"
+      "latency_ms": 2003.7015430280007,
+      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 6,
-      "probe": "kubernetes_api",
-      "target": "kubernetes.default.svc:443+10.43.0.1",
+      "id": "5",
+      "probe": "node_metadata",
+      "target": "169.254.169.254:80",
       "verdict": "refused",
-      "latency_ms": 2005.8507929788902,
-      "detail": "dns=error; tcp_name=skipped; tcp_clusterip=refused"
+      "latency_ms": 2002.1945420303382,
+      "detail": "link-local cloud metadata; k3d has no IMDS",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     },
     {
       "row": 7,
+      "id": "6a",
+      "probe": "kubernetes_api_name",
+      "target": "kubernetes.default.svc:443",
+      "verdict": "refused",
+      "latency_ms": 7.047416991554201,
+      "detail": "dns=refused; tcp_name=skipped",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
+    },
+    {
+      "row": 8,
+      "id": "6b",
+      "probe": "kubernetes_api_ip",
+      "target": "10.43.0.1:443",
+      "verdict": "refused",
+      "latency_ms": 2342.2385010053404,
+      "detail": "tcp_clusterip=refused",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
+    },
+    {
+      "row": 9,
+      "id": "7",
       "probe": "kubelet",
       "target": "172.18.0.3:10250",
       "verdict": "refused",
-      "latency_ms": 2002.7070850483142,
-      "detail": "node InternalIP kubelet"
+      "latency_ms": 2003.8228339981288,
+      "detail": "node InternalIP kubelet",
+      "leak": "",
+      "policy_propagation_ms": 71.62213325500488,
+      "probe_epoch": 1790608458.6568892,
+      "cnp_valid_epoch": 1790608453.652307,
+      "seconds_after_cnp_valid": 5.004582166671753
     }
   ]
 }

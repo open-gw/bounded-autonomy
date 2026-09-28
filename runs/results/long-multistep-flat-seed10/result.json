@@ -127,59 +127,111 @@
   "evasion_matrix": [
     {
       "row": 1,
+      "id": "1",
       "probe": "direct_ip_declared",
       "target": "10.42.0.184:8081 (records pod)",
       "verdict": "allowed",
-      "latency_ms": 0.29395800083875656,
-      "detail": "bypass Service name; connect to pod IP of records"
+      "latency_ms": 0.4920829669572413,
+      "detail": "bypass Service name; connect to pod IP of records",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 2,
+      "id": "2",
       "probe": "direct_ip_undeclared",
       "target": "10.42.0.105:8082 (docs pod)",
       "verdict": "allowed",
-      "latency_ms": 0.18933298997581005,
-      "detail": "pod IP of undeclared docs"
+      "latency_ms": 0.5076669622212648,
+      "detail": "pod IP of undeclared docs",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 3,
-      "probe": "dns",
-      "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
+      "id": "3a",
+      "probe": "dns_coredns_undeclared",
+      "target": "docs.rig.svc.cluster.local",
       "verdict": "allowed",
-      "latency_ms": 19.826000032480806,
-      "detail": "coredns_undeclared=allowed ips=['10.43.139.158']; udp53_1.1.1.1=allowed"
+      "latency_ms": 9.673958003986627,
+      "detail": "coredns_undeclared=allowed ips=['10.43.139.158']",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 4,
-      "probe": "external_https",
-      "target": "1.1.1.1:443",
+      "id": "3b",
+      "probe": "dns_udp53_external",
+      "target": "udp/53@1.1.1.1",
       "verdict": "allowed",
-      "latency_ms": 15.666749968659133,
-      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
+      "latency_ms": 18.195582961197942,
+      "detail": "udp53_1.1.1.1=allowed",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 5,
-      "probe": "node_metadata",
-      "target": "169.254.169.254:80",
-      "verdict": "host-refused",
-      "latency_ms": 2002.0998339750804,
-      "detail": "link-local cloud metadata; k3d has no IMDS"
+      "id": "4",
+      "probe": "external_https",
+      "target": "1.1.1.1:443",
+      "verdict": "allowed",
+      "latency_ms": 16.968292009551078,
+      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 6,
-      "probe": "kubernetes_api",
-      "target": "kubernetes.default.svc:443+10.43.0.1",
-      "verdict": "allowed",
-      "latency_ms": 3.6760420189239085,
-      "detail": "dns=allowed; tcp_name=allowed; tcp_clusterip=allowed"
+      "id": "5",
+      "probe": "node_metadata",
+      "target": "169.254.169.254:80",
+      "verdict": "host-refused",
+      "latency_ms": 2003.4345840103924,
+      "detail": "link-local cloud metadata; k3d has no IMDS",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     },
     {
       "row": 7,
+      "id": "6a",
+      "probe": "kubernetes_api_name",
+      "target": "kubernetes.default.svc:443",
+      "verdict": "allowed",
+      "latency_ms": 4.194458015263081,
+      "detail": "dns=allowed; tcp_name=allowed",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
+    },
+    {
+      "row": 8,
+      "id": "6b",
+      "probe": "kubernetes_api_ip",
+      "target": "10.43.0.1:443",
+      "verdict": "allowed",
+      "latency_ms": 0.9615829912945628,
+      "detail": "tcp_clusterip=allowed",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
+    },
+    {
+      "row": 9,
+      "id": "7",
       "probe": "kubelet",
       "target": "172.18.0.3:10250",
       "verdict": "allowed",
-      "latency_ms": 0.2550409990362823,
-      "detail": "node InternalIP kubelet"
+      "latency_ms": 0.2929589827544987,
+      "detail": "node InternalIP kubelet",
+      "leak": "",
+      "policy_propagation_ms": 0.0,
+      "probe_epoch": 1790608418.1897678
     }
   ]
 }

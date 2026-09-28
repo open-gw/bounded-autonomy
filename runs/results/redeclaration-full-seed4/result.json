@@ -4,9 +4,9 @@
   "profile": "redeclaration",
   "mode": "full",
   "seed": 4,
-  "started_at": "2026-09-28T05:22:28.459815Z",
-  "finished_at": "2026-09-28T05:23:36.554146Z",
-  "wall_clock_seconds": 68.09433054924011,
+  "started_at": "2026-09-28T15:25:26.070866Z",
+  "finished_at": "2026-09-28T15:25:29.942915Z",
+  "wall_clock_seconds": 3.8720483779907227,
   "source": "cluster",
   "declaration": {
     "task_id": "redeclaration-full-seed4",
@@ -28,37 +28,33 @@
     "irreversible": 3
   },
   "metrics": {
-    "reachable_set_size": 8,
+    "reachable_set_size": 4,
     "reachable_services": [
-      "analytics",
-      "audit",
-      "billing",
-      "catalog",
       "docs",
       "notify",
       "records",
       "search"
     ],
-    "reachable_weight": 14,
-    "credential_ratio": 26.43652750655745,
+    "reachable_weight": 10,
+    "credential_ratio": 465.95623345645686,
     "credential_ratio_derivation": {
       "formula": "credential_ratio = tau_seconds / T_seconds",
       "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
       "tau_seconds": 1800.0,
-      "T_seconds": 68.08761096000671,
+      "T_seconds": 3.8630237579345703,
       "credential_kind": "jwt-svid"
     },
     "tau_seconds": 1800.0,
-    "T_seconds": 68.08761096000671,
-    "tau_issued_epoch": 1790573010.0,
-    "tau_not_after_epoch": 1790574810.0,
-    "T_start_epoch": 1790572948.4598155,
-    "T_end_epoch": 1790573016.5474265,
-    "residual_svid_seconds": 1793.2532169818878,
-    "residual_policy_seconds": 1.6558079719543457,
-    "entry_deleted_at_epoch": 1790573039.705792,
-    "policy_removed_at_epoch": 1790573018.402591,
-    "task_end_epoch": 1790573016.746783,
+    "T_seconds": 3.8630237579345703,
+    "tau_issued_epoch": 1790609129.0,
+    "tau_not_after_epoch": 1790610929.0,
+    "T_start_epoch": 1790609126.0708683,
+    "T_end_epoch": 1790609129.933892,
+    "residual_svid_seconds": 1798.8843278884888,
+    "residual_policy_seconds": 0.9164650440216064,
+    "entry_deleted_at_epoch": 1790609194.7621021,
+    "policy_removed_at_epoch": 1790609131.0321372,
+    "task_end_epoch": 1790609130.115672,
     "credential_kind": "jwt-svid",
     "rollback_completeness": {
       "idempotent": {
@@ -96,17 +92,17 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.008419792,
+      "absolute_seconds": 0.008875456,
       "relative": null,
-      "verify_ms": 8.419792000000001,
-      "total_ms": 920.4857499999999
+      "verify_ms": 8.875456,
+      "total_ms": 1043.140041
     },
-    "segment_p_ms": 47215.59405326843,
-    "segment_q_ms": 1655.8079719543457,
+    "segment_p_ms": 137.8030776977539,
+    "segment_q_ms": 916.4650440216064,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 47215.59405326843,
-    "d_ms_max": 47215.59405326843,
+    "d_ms_mean": 137.8030776977539,
+    "d_ms_max": 137.8030776977539,
     "breach_services": [
       "docs"
     ],
@@ -116,7 +112,7 @@
     "breach_intersection_size": 1
   },
   "policy_propagation_ms": [
-    47215.59405326843
+    137.8030776977539
   ],
   "artefacts": {
     "probe": "probe.parquet",
@@ -127,7 +123,7 @@
     "svid": "svid.parquet",
     "gateway": "gateway.parquet"
   },
-  "redeclaration_cost_ms": 66996.81186676025,
+  "redeclaration_cost_ms": 2717.5374031066895,
   "steps_reexecuted": 0,
   "writes_committed_before_termination": true
 }

@@ -112,7 +112,8 @@
     "breach_intersection": [
       "docs"
     ],
-    "breach_intersection_size": 1
+    "breach_intersection_size": 1,
+    "gateway_403": 2
   },
   "policy_propagation_ms": [],
   "artefacts": {

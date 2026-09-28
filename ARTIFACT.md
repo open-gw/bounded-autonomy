@@ -26,7 +26,7 @@ make down
 
 `make analyse` and `make paper-tables` both call `analysis/tables.py` and **exit 1** unless every gated `result.json` has `source=cluster`, `spans.parquet` verify-span durations with non-zero variance, and verify-span count in `[steps_completed-1, steps_completed]` (`flat` must match `steps_completed` exactly).
 
-Paste from the dedicated `TABLE=` files when a selector exists. Default `make paper-tables` writes headline Reach / Rollback / Overhead / Credentials / Segment / Step plus Dispersion (median [IQR] and bootstrap 95% CI for the median, 1000 resamples, RNG seed 26). Gateway, sweep, evasion, re-declaration, step-split, and data-intensive rows are excluded from the headline Reach table so 3-vs-8 stays 3-vs-8.
+Paste from the dedicated `TABLE=` files when a selector exists. Default `make paper-tables` writes headline Reach / Rollback / Overhead / Credentials / Segment / Step plus Dispersion (median [IQR] and bootstrap 95% CI for the median, 1000 resamples, RNG seed 26). Each caption prints **that selector’s n** (Reach/Q2 n=20, Step n=10, Sweep n=20), never the whole-tree n=97. Gateway, sweep, evasion, re-declaration, step-split, and data-intensive rows are excluded from the headline Reach table so 3-vs-8 stays 3-vs-8. Evasion split and `gateway_403`: [`docs/findings/32-evasion-gateway.md`](docs/findings/32-evasion-gateway.md).
 
 ## Table and figure map
 
@@ -39,9 +39,9 @@ Paste from the dedicated `TABLE=` files when a selector exists. Default `make pa
 | Segment \(p/q/d\) (Q4) | `make analyse` / `make paper-tables` | `tables.md` § Segment; `tables.tex` `% Segment` | `result.json` → `segment_p_ms`, `segment_q_ms`, `d_ms_mean`, `d_ms_max` |
 | Step granularity | `make analyse` / `make paper-tables` | `tables.md` § Step; `tables.tex` `% Step` | `runs/results/long-multistep-full-step-seed{1–10}/result.json` |
 | Dispersion (M6) median [IQR] + bootstrap 95% CI | `make paper-tables TABLE=dispersion` | `analysis/output/dispersion.tex` / `.md` / `.json` | task `flat`/`full` seeds 1–10 plus gateway cells; schema `schemas/dispersion.schema.json` |
-| Gateway cells (APISIX `uri-blocker`, not Kong) | `make paper-tables TABLE=gateway` | `analysis/output/gateway.tex` / `.md` | `long-multistep-{gateway-only,gateway-bypass,full-bypass}-seed{1–10}` |
+| Gateway cells (APISIX `uri-blocker`, not Kong) | `make paper-tables TABLE=gateway` | `analysis/output/gateway.tex` / `.md` | `long-multistep-{gateway-only,gateway-bypass,full-bypass}-seed{1–10}`; column `gateway_403` from `gateway.parquet` 403s |
 | Declaration tightness sweep (k/\|S\|, §7.4) | `make paper-tables TABLE=sweep` | `analysis/output/sweep.md` / `.tex` | `long-multistep-k{1,3,5,7}-full-seed{1–5}` |
-| Evasion matrix (7 probes × verdict) | `make paper-tables TABLE=evasion` | `analysis/output/evasion.tex` / `evasion.md` | `result.json` → `evasion_matrix`; `evasion.parquet` |
+| Evasion matrix (9 probes × verdict; 3a/3b and 6a/6b split) | `make paper-tables TABLE=evasion` | `analysis/output/evasion.tex` / `evasion.md` | `result.json` → `evasion_matrix` (rows 1–9); `evasion.parquet`. Do not paste 5/10. Per-seed table includes CNP Valid timestamps. |
 | Re-declaration cost (M4 Q4) | `make paper-tables TABLE=redeclaration` | `analysis/output/redeclaration.md` / `.tex` | `redeclaration-full-seed{1–5}` (`redeclaration_cost_ms`) |
 | Per-step cost split (probe on/off) | `make paper-tables TABLE=step-split` | `analysis/output/step-split.md` / `.tex` | `long-multistep-full-step-{split,noprobe}-seed{n}` |
 | Data-intensive profile (G4 / Q3) | `make paper-tables TABLE=data-intensive` | `analysis/output/data-intensive.md` / `.tex` | `data-intensive-full-seed{1–10}` |
@@ -49,7 +49,7 @@ Paste from the dedicated `TABLE=` files when a selector exists. Default `make pa
 | `\val{}` slots | cluster `result.json` only, never `analysis/fixtures/` | committed under `runs/results/` | produced by `make run` / `make campaign` after `make up` |
 | Section VI measurement host | (recorded, not generated) | [`docs/findings/12-reproducibility.md`](docs/findings/12-reproducibility.md) | Apple M3 Pro, 12-core, 18 GiB, Darwin 25.5.0, Docker 29.7.2 / Desktop 4.87.0 |
 
-`make paper-tables-all` runs the default target and every `TABLE=` selector above. Generated files under `analysis/output/` are local (gitignored); the committed record of the numbers is `docs/findings/26-campaign.md` through `29-data-intensive.md` plus this map.
+`make paper-tables-all` runs the default target and every `TABLE=` selector above. Generated files under `analysis/output/` are local (gitignored); the committed record of the numbers is `docs/findings/26-campaign.md` through `32-evasion-gateway.md` plus this map.
 
 Pre-registered Markdown notebook (synthetic fixtures only, **not** manuscript-pasteable): `make notebook` → `analysis/notebook.ipynb` on `analysis/fixtures/results/`.
 
@@ -66,7 +66,7 @@ Pre-registered Markdown notebook (synthetic fixtures only, **not** manuscript-pa
 | `lineage.parquet` | OpenLineage events |
 | `groundtruth.parquet` | store-level rollback truth |
 | `svid.parquet` | SPIRE issue/expiry for \(\tau\) |
-| `evasion.parquet` | seven-probe evasion matrix (Task 23; optional on older runs) |
+| `evasion.parquet` | nine-probe evasion matrix (Task 32 split of Task 23 rows 3 and 6; optional on older runs) |
 | `gateway.parquet` | APISIX access log (Task 24; optional on non-gateway runs) |
 
 Headline run ids: `long-multistep-flat-seed{1–10}`, `long-multistep-full-seed{1–10}`, `long-multistep-full-step-seed{1–10}`. Directories whose path parts start with `_` are ignored by `analysis/tables.py`.

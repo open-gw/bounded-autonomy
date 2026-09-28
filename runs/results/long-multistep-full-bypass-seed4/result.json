@@ -106,7 +106,8 @@
       "docs"
     ],
     "breach_intersection": [],
-    "breach_intersection_size": 0
+    "breach_intersection_size": 0,
+    "gateway_403": 0
   },
   "policy_propagation_ms": [
     69.91291046142578
