@@ -250,3 +250,57 @@ def verification_overhead(
         "baseline_verify_ms": base_verify_ms,
         "baseline_total_ms": base_total_ms,
     }
+
+
+def step_cost_split(
+    boundaries: Iterable[Mapping[str, Any]],
+    *,
+    probe_enabled: bool,
+    tolerance_pct: float = 5.0,
+) -> dict[str, Any]:
+    """Named clocks plus residual ``other_ms``; used when step_boundaries exist."""
+    rows: list[dict[str, Any]] = []
+    for raw in boundaries:
+        prop = float(raw.get("propagation_ms") or 0.0)
+        svid = float(raw.get("svid_reissue_ms") or 0.0)
+        probe = float(raw.get("probe_ms") or 0.0)
+        observed = float(raw.get("boundary_ms") or 0.0)
+        if "other_ms" in raw and raw["other_ms"] is not None:
+            other = float(raw["other_ms"])
+        else:
+            other = observed - prop - svid - probe
+        accounted = prop + svid + probe + other
+        if observed <= 0:
+            observed = accounted
+        rows.append(
+            {
+                "step": int(raw.get("step") or 0),
+                "propagation_ms": prop,
+                "svid_reissue_ms": svid,
+                "probe_ms": probe,
+                "other_ms": other,
+                "boundary_ms": observed,
+            }
+        )
+    totals = {
+        "propagation_ms": sum(r["propagation_ms"] for r in rows),
+        "svid_reissue_ms": sum(r["svid_reissue_ms"] for r in rows),
+        "probe_ms": sum(r["probe_ms"] for r in rows),
+        "other_ms": sum(r["other_ms"] for r in rows),
+        "boundary_ms": sum(r["boundary_ms"] for r in rows),
+    }
+    accounted = (
+        totals["propagation_ms"]
+        + totals["svid_reissue_ms"]
+        + totals["probe_ms"]
+        + totals["other_ms"]
+    )
+    observed = totals["boundary_ms"]
+    error_pct = 0.0 if observed <= 0 else abs(accounted - observed) / observed * 100.0
+    return {
+        "probe_enabled": bool(probe_enabled),
+        "boundaries": rows,
+        "totals": totals,
+        "reconcile_error_pct": error_pct,
+        "reconcile_ok": error_pct <= tolerance_pct,
+    }
