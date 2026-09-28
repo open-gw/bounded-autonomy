@@ -23,18 +23,27 @@ def test_tau_is_exp_minus_iat_not_issue_to_delete():
 
 
 def test_jwt_ttl_task_vs_step():
-    spec = {"expectedDurationSeconds": 1800, "granularity": "task"}
-    assert jwt_ttl_seconds(spec) == 1800
+    spec = {"expectedDurationSeconds": 23, "granularity": "task"}
+    assert jwt_ttl_seconds(spec) == 23
     spec["granularity"] = "step"
-    spec["expectedStepDurationSeconds"] = 60
-    assert jwt_ttl_seconds(spec) == 60
+    spec["expectedStepDurationSeconds"] = 1
+    assert jwt_ttl_seconds(spec) == 1
     assert POD_X509_SVID_TTL_SECONDS == 3600
+
+
+def test_jwt_ttl_missing_duration_fails():
+    with pytest.raises(ValueError, match="lacks expected"):
+        jwt_ttl_seconds({"granularity": "task"})
+    with pytest.raises(ValueError, match="lacks expected_step"):
+        jwt_ttl_seconds({"granularity": "step", "expectedDurationSeconds": 23})
 
 
 def test_residual_two_windows():
     got = residual_seconds(exp=2800.0, task_end=1012.0, policy_removed_at=1012.363)
     assert got["residual_svid_seconds"] == 1788.0
+    assert got["residual_credential_s"] == 1788.0
     assert got["residual_policy_seconds"] == pytest.approx(0.363)
+    assert got["residual_reach_ms"] == pytest.approx(363.0)
 
 
 def test_extract_jwt_and_entry_id():

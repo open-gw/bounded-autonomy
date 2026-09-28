@@ -33,6 +33,9 @@
     "gateway_bypass": { "type": "boolean" },
     "seed": { "type": "integer", "minimum": 0 },
     "source": { "enum": ["simulator", "cluster"] },
+    "superseded_by": { "type": "string", "minLength": 1 },
+    "jwt_ttl_requested_seconds": { "type": ["integer", "null"], "minimum": 1 },
+    "jwt_ttl_granted_seconds": { "type": ["integer", "null"], "minimum": 1 },
     "variant": { "enum": ["k1", "k3", "k5", "k7"] },
     "started_at": { "type": "string", "format": "date-time" },
     "finished_at": { "type": "string", "format": "date-time" },
@@ -68,6 +71,16 @@
           "maximum": 86400
         },
         "expected_step_duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "expected_task_duration_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "expected_step_duration_s": {
           "type": "integer",
           "minimum": 1,
           "maximum": 86400
@@ -135,6 +148,7 @@
             "tau_definition": { "type": "string", "minLength": 1 },
             "tau_seconds": { "type": ["number", "null"] },
             "T_seconds": { "type": ["number", "null"] },
+            "T_definition": { "type": "string", "minLength": 1 },
             "credential_kind": { "enum": ["jwt-svid", "sa-token", "svid"] }
           }
         },
@@ -146,6 +160,10 @@
         "T_end_epoch": { "type": ["number", "null"] },
         "residual_svid_seconds": { "type": ["number", "null"] },
         "residual_policy_seconds": { "type": ["number", "null"] },
+        "residual_credential_s": { "type": ["number", "null"] },
+        "residual_reach_ms": { "type": ["number", "null"] },
+        "jwt_ttl_requested_seconds": { "type": ["integer", "null"], "minimum": 1 },
+        "jwt_ttl_granted_seconds": { "type": ["integer", "null"], "minimum": 1 },
         "entry_deleted_at_epoch": { "type": ["number", "null"] },
         "policy_removed_at_epoch": { "type": ["number", "null"] },
         "task_end_epoch": { "type": ["number", "null"] },
@@ -179,6 +197,7 @@
         "step_ratio_max": { "type": ["number", "null"] },
         "d_ms_mean": { "type": ["number", "null"] },
         "d_ms_max": { "type": ["number", "null"] },
+        "gateway_403": { "type": "integer", "minimum": 0 },
         "breach_services": {
           "type": "array",
           "items": { "type": "string" }
@@ -314,7 +333,14 @@
         "svid_reissue_ms": { "type": "number", "minimum": 0 },
         "probe_ms": { "type": "number", "minimum": 0 },
         "other_ms": { "type": "number" },
-        "boundary_ms": { "type": "number", "minimum": 0 }
+        "boundary_ms": { "type": "number", "minimum": 0 },
+        "d_ms": { "type": "number", "minimum": 0 },
+        "declaration_updated_at_epoch": { "type": ["number", "null"] },
+        "first_enforced_at_epoch": { "type": ["number", "null"] },
+        "cnp_wait_started_epoch": { "type": ["number", "null"] },
+        "cnp_valid_epoch": { "type": ["number", "null"] },
+        "reconcile_error_pct": { "type": "number", "minimum": 0 },
+        "reconcile_ok": { "type": "boolean" }
       }
     },
     "stepCostTotals": {

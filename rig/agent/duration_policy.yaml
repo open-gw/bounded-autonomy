@@ -1,0 +1,34 @@
+# Task 31 duration policy. Do not invent p95s.
+#
+# Per-tool p95 is the 95th percentile of Tempo `verify` span duration_ms from
+# the Task 26 exclusive M3 Pro campaign, attributed to the seeded step plan
+# (injection step 15 omitted; 29 verifies × 10 full task-granularity seeds).
+# The campaign export has `verify` and `run`, not `tool.call`; verify is the
+# measured per-call latency available from that artefact set.
+#
+# step_budget_ms(tool) = max(floor_ms, p95_ms[tool] * p95_multiplier)
+# expected_step_duration_s = ceil(max(step budgets) / 1000)
+# expected_task_duration_s = ceil((sum(step budgets) * task_slack) / 1000)
+# JWT-SVID TTL = declared duration for the run's granularity, then
+# max(requested, spire_min_jwt_ttl_seconds).
+
+source:
+  campaign: task26
+  host: Apple M3 Pro
+  runs: long-multistep-full-seed{1-10}
+  instrument: tempo verify span duration_ms paired in start_epoch order to non-injection steps
+  n_calls:
+    records: 203
+    search: 57
+    notify: 30
+
+floor_ms: 500
+p95_multiplier: 3.0
+task_slack: 1.5
+# SPIRE 1.15 `jwt mint -ttl`: JWT-SVID TTL must be at least 1 second.
+spire_min_jwt_ttl_seconds: 1
+
+p95_ms:
+  records: 0.1997494
+  search: 0.2233414
+  notify: 0.98716235

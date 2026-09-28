@@ -302,3 +302,70 @@ def test_paper_tables_evasion(tmp_path):
     assert "| 1 |" in md and "direct-IP" in md
     assert "host-refused" in md
     assert "1.1.1.1" in emit_evasion_latex(load_results(tmp_path)) or "external" in md
+
+
+def test_analyse_refuses_mixed_tau_definition(tmp_path):
+    import json
+
+    jwt = _cluster_run(tmp_path / "a", "full-jwt", "full", 29)
+    old = _cluster_run(tmp_path / "b", "full-old", "full", 29)
+    for path, tau_def in (
+        (jwt / "result.json", "jwt_ttl"),
+        (old / "result.json", None),
+    ):
+        doc = json.loads(path.read_text())
+        doc["metrics"] = {
+            "reachable_set_size": 3,
+            "reachable_weight": 7,
+            "tau_seconds": 23.0 if tau_def else 1.2,
+            "T_seconds": 0.4,
+            "credential_ratio": 50.0 if tau_def else 1.0,
+            "credential_ratio_derivation": {
+                "formula": "credential_ratio = tau_seconds / T_seconds",
+                "tau_definition": tau_def or "",
+                "tau_seconds": 23.0 if tau_def else 1.2,
+                "T_seconds": 0.4,
+                "credential_kind": "jwt-svid",
+            }
+            if tau_def
+            else None,
+            "segment_p_ms": 1.0,
+            "segment_q_ms": 1.0,
+            "d_ms_mean": 1.0,
+            "d_ms_max": 1.0,
+            "rollback_completeness": {
+                "idempotent": {"rho_rev": 1.0, "n": 12, "restored": 12},
+                "versioned": {"rho_rev": 1.0, "n": 9, "restored": 9},
+                "derived": {"rho_rev": None, "n": 6, "quarantined": 6},
+                "irreversible": {"rho_rev": 0.0, "n": 3, "escalated": 3},
+            },
+            "verification_overhead": {"verify_ms": 2.0, "total_ms": 100.0, "relative": 0.0},
+        }
+        if not tau_def:
+            doc["metrics"].pop("credential_ratio_derivation")
+        path.write_text(json.dumps(doc))
+    rc = analyse_main(
+        [
+            "--results",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--table",
+            "credential",
+        ]
+    )
+    assert rc == 1
+
+
+def test_load_results_skips_superseded(tmp_path):
+    import json
+
+    keep = _cluster_run(tmp_path, "keep-run", "full", 29)
+    drop = _cluster_run(tmp_path, "drop-run", "full", 29)
+    doc = json.loads((drop / "result.json").read_text())
+    doc["superseded_by"] = "task31"
+    (drop / "result.json").write_text(json.dumps(doc))
+    loaded = load_results(tmp_path)
+    ids = {r["run_id"] for r in loaded}
+    assert "keep-run" in ids
+    assert "drop-run" not in ids

@@ -41,6 +41,8 @@ def load_results(results_dir: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for path in paths:
         doc = json.loads(path.read_text())
+        if doc.get("superseded_by"):
+            continue
         doc["_path"] = str(path)
         out.append(doc)
     if not out:
@@ -50,6 +52,39 @@ def load_results(results_dir: Path) -> list[dict[str, Any]]:
 
 class ProvenanceError(Exception):
     """Manuscript tables requested from non-cluster results."""
+
+
+TAU_JWT = "jwt_ttl"
+TAU_ISSUE_REVOKE = "issue_revoke"
+TAU_SA_TOKEN = "sa_token"
+
+
+def normalize_tau_definition(row: dict[str, Any]) -> str:
+    if str(row.get("mode") or "") == "flat":
+        return TAU_SA_TOKEN
+    der = (row.get("metrics") or {}).get("credential_ratio_derivation") or {}
+    raw = der.get("tau_definition") or row.get("tau_definition")
+    if raw in (None, ""):
+        return TAU_ISSUE_REVOKE
+    text = str(raw).strip().lower()
+    if text in (TAU_JWT, "jwt-ttl") or text.startswith("exp"):
+        return TAU_JWT
+    if "issue" in text:
+        return TAU_ISSUE_REVOKE
+    if text in (TAU_SA_TOKEN, "sa-token", "sa_token_ttl"):
+        return TAU_SA_TOKEN
+    return text
+
+
+def assert_tau_definitions_consistent(results: list[dict[str, Any]]) -> None:
+    defs = sorted({normalize_tau_definition(r) for r in results})
+    if len(defs) <= 1:
+        return
+    raise ProvenanceError(
+        "refusing to aggregate mixed tau_definition: "
+        + ", ".join(defs)
+        + " (Task 31: no table mixes JWT TTL with issue→revoke)"
+    )
 
 
 def _variant_of(row: dict[str, Any]) -> str | None:
@@ -70,8 +105,6 @@ def _is_redeclaration(row: dict[str, Any]) -> bool:
 
 
 def _is_step_split(row: dict[str, Any]) -> bool:
-    if row.get("step_cost_split"):
-        return True
     run_id = str(row.get("run_id") or "")
     return "step-split" in run_id or "step-noprobe" in run_id
 
@@ -86,6 +119,29 @@ def _task_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for r in results
         if (r.get("declaration") or {}).get("granularity", "task") == "task"
         and not _is_sweep(r)
+        and not _is_data_intensive(r)
+        and not _is_gateway(r)
+        and not _is_redeclaration(r)
+        and not _is_step_split(r)
+    ]
+
+
+def _step_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in results
+        if (r.get("declaration") or {}).get("granularity") == "step"
+        and not _is_step_split(r)
+        and not _is_redeclaration(r)
+    ]
+
+
+def _headline_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Default TABLE= gate: long-multistep task + step, no sweep/gateway/etc."""
+    return [
+        r
+        for r in results
+        if not _is_sweep(r)
         and not _is_data_intensive(r)
         and not _is_gateway(r)
         and not _is_redeclaration(r)
@@ -644,6 +700,140 @@ def table_credentials(results: list[dict[str, Any]]) -> str:
     )
 
 
+def _credential_cell(row: dict[str, Any]) -> str:
+    gran = (row.get("declaration") or {}).get("granularity", "task")
+    if row.get("mode") == "flat":
+        return "flat"
+    if row.get("mode") == "full" and gran == "step":
+        return "full-step"
+    return "full"
+
+
+def _credential_table_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in results:
+        if row.get("superseded_by"):
+            continue
+        if _is_sweep(row) or _is_gateway(row) or _is_data_intensive(row) or _is_redeclaration(row):
+            continue
+        if _is_step_split(row):
+            continue
+        if str(row.get("profile") or "long-multistep") != "long-multistep":
+            continue
+        if row.get("mode") not in ("flat", "full"):
+            continue
+        out.append(row)
+    return out
+
+
+def _residual_credential(row: dict[str, Any]) -> float | None:
+    m = row.get("metrics") or {}
+    if m.get("residual_credential_s") is not None:
+        return float(m["residual_credential_s"])
+    if m.get("residual_svid_seconds") is not None:
+        return float(m["residual_svid_seconds"])
+    return None
+
+
+def _residual_reach_ms(row: dict[str, Any]) -> float | None:
+    m = row.get("metrics") or {}
+    if m.get("residual_reach_ms") is not None:
+        return float(m["residual_reach_ms"])
+    if m.get("residual_policy_seconds") is not None:
+        return float(m["residual_policy_seconds"]) * 1000.0
+    return None
+
+
+def _credential_paper_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in _credential_table_results(results):
+        grouped[_credential_cell(row)].append(row)
+    order = ("flat", "full", "full-step")
+    out: list[tuple[str, ...]] = []
+    for cell in order:
+        rows = grouped.get(cell) or []
+        if not rows:
+            continue
+        tau_defs = sorted({normalize_tau_definition(r) for r in rows})
+        tau_txt = tau_defs[0] if len(tau_defs) == 1 else "+".join(tau_defs)
+        tau = median_iqr_ci(_metric_values(rows, lambda r: (r.get("metrics") or {}).get("tau_seconds")))
+        tsec = median_iqr_ci(_metric_values(rows, lambda r: (r.get("metrics") or {}).get("T_seconds")))
+        ratio = median_iqr_ci(
+            _metric_values(rows, lambda r: (r.get("metrics") or {}).get("credential_ratio"))
+        )
+        resid = median_iqr_ci(_metric_values(rows, _residual_credential))
+        reach = median_iqr_ci(_metric_values(rows, _residual_reach_ms))
+        out.append(
+            (
+                cell,
+                str(len(rows)),
+                tau_txt,
+                _fmt_median_iqr(tau, 3),
+                _fmt_median_iqr(tsec, 3),
+                _fmt_median_iqr(ratio, 3),
+                _fmt_median_iqr(resid, 3) if cell != "flat" else _EMDASH,
+                _fmt_median_iqr(reach, 1) if cell != "flat" else _EMDASH,
+            )
+        )
+    return out
+
+
+def table_credential_paper(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| cell | n | τ def | median τ (s) [IQR] | median T (s) [IQR] | median τ/T [IQR] | median residual_credential_s [IQR] | median residual_reach_ms [IQR] |",
+        "| --- | ---: | --- | --- | --- | --- | --- | --- |",
+        _credential_paper_rows(results),
+    )
+
+
+def _credential_caption(results: list[dict[str, Any]]) -> str:
+    rows = _credential_table_results(results)
+    counts = defaultdict(int)
+    for row in rows:
+        counts[_credential_cell(row)] += 1
+    parts = [f"{name} n={counts[name]}" for name in ("flat", "full", "full-step") if counts[name]]
+    sources = sorted({str(r.get("source", "unknown")) for r in rows})
+    return (
+        "*Caption: Credentials (Task 31). source="
+        + "+".join(sources)
+        + (f" ({'; '.join(parts)})." if parts else ".")
+        + " τ = exp − iat of the JWT-SVID (full/full-step) or 24 h SA token (flat, τ = 86400 s). "
+        "T = first to last tool call. residual_credential_s = exp − task_end; "
+        "residual_reach_ms = policy_removed_at − task_end. No mixed τ definitions.*"
+    )
+
+
+def emit_credential_markdown(results: list[dict[str, Any]]) -> str:
+    rows = _credential_table_results(results)
+    return "\n".join(
+        [
+            "# Credentials (Task 31)",
+            "",
+            _credential_caption(rows),
+            "",
+            table_credential_paper(rows),
+            "",
+        ]
+    )
+
+
+def emit_credential_latex(results: list[dict[str, Any]]) -> str:
+    rows = _credential_table_results(results)
+    body = _credential_paper_rows(rows)
+    comment = _credential_caption(rows).strip("*")
+    lines = [
+        "% --- Credentials (Task 31) ---",
+        f"% {comment}",
+        r"\begin{tabular}{lrlrrrrr}",
+        r"cell & $n$ & $\tau$ def & median $\tau$ (s) [IQR] & median $T$ (s) [IQR] & median $\tau/T$ [IQR] & median residual\_credential\_s [IQR] & median residual\_reach\_ms [IQR] \\",
+        r"\hline",
+    ]
+    for row in body:
+        lines.append(" & ".join(_latex_cell(c) for c in row) + r" \\")
+    lines.append(r"\end{tabular}")
+    return "\n".join(lines) + "\n"
+
+
 def _segment_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _task_results(results)
     rows: list[tuple[str, ...]] = []
@@ -674,13 +864,7 @@ def table_segment(results: list[dict[str, Any]]) -> str:
 
 
 def _step_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
-    rows = [
-        r
-        for r in results
-        if (r.get("declaration") or {}).get("granularity") == "step"
-        and not _is_step_split(r)
-        and not _is_redeclaration(r)
-    ]
+    rows = _step_results(results)
     if not rows:
         return [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)]
     out: list[tuple[str, ...]] = []
@@ -930,7 +1114,19 @@ def _redeclaration_results(results: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def _step_split_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [r for r in results if _is_step_split(r)]
+    out: list[dict[str, Any]] = []
+    for row in results:
+        if row.get("superseded_by"):
+            continue
+        if _is_redeclaration(row) or _is_data_intensive(row) or _is_sweep(row):
+            continue
+        if not row.get("step_cost_split"):
+            continue
+        gran = (row.get("declaration") or {}).get("granularity")
+        if gran != "step" and not _is_step_split(row):
+            continue
+        out.append(row)
+    return out
 
 
 BOOTSTRAP_RESAMPLES = 1000
@@ -1064,38 +1260,61 @@ def table_redeclaration(results: list[dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
-def table_step_split(results: list[dict[str, Any]]) -> str:
-    rows = sorted(
-        _step_split_results(results),
-        key=lambda r: (
-            0 if (r.get("observer") or {}).get("probe", True) else 1,
-            int(r.get("seed") or 0),
-        ),
-    )
-    body: list[tuple[str, ...]] = []
-    for r in rows:
-        split = r.get("step_cost_split") or {}
-        totals = split.get("totals") or {}
-        probe_on = (r.get("observer") or {}).get("probe")
+def _step_split_boundaries(results: list[dict[str, Any]], *, probe: bool | None = None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in _step_split_results(results):
+        split = result.get("step_cost_split") or {}
+        probe_on = (result.get("observer") or {}).get("probe")
         if probe_on is None:
             probe_on = split.get("probe_enabled")
-        body.append(
-            (
-                "on" if probe_on else "off",
-                str(r.get("seed")),
-                f"{float(totals.get('propagation_ms') or 0.0):.1f}",
-                f"{float(totals.get('svid_reissue_ms') or 0.0):.1f}",
-                f"{float(totals.get('probe_ms') or 0.0):.1f}",
-                f"{float(totals.get('other_ms') or 0.0):.1f}",
-                f"{float(totals.get('boundary_ms') or 0.0):.1f}",
-                f"{float(split.get('reconcile_error_pct') or 0.0):.2f}",
-            )
-        )
-    return _md_lines(
-        "| probe | seed | propagation (ms) | SVID reissue (ms) | probe (ms) | other (ms) | boundary (ms) | reconcile % |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-        body or [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)],
+        if probe is not None and bool(probe_on) != probe:
+            continue
+        for boundary in split.get("boundaries") or []:
+            rows.append(boundary)
+    return rows
+
+
+def _step_split_caption(results: list[dict[str, Any]], n_bounds: int, n_on: int, n_off: int) -> str:
+    sources = sorted({str(r.get("source", "unknown")) for r in _step_split_results(results)})
+    return (
+        "*Caption: Step cost split (Task 31). source="
+        + "+".join(sources)
+        + f" (n={n_bounds} boundaries"
+        + (f"; probe-on n={n_on}" if n_on else "")
+        + (f"; probe-off n={n_off}" if n_off else "")
+        + "). Units are per boundary, not per run. "
+        "`d` = cnp_wait_started → cnp_valid. "
+        "`propagation` = declaration apply returned → first enforced (CNP Valid). "
+        "Named clocks plus `other` sum to the boundary total within 5% on every boundary.*"
     )
+
+
+def table_step_split(results: list[dict[str, Any]]) -> str:
+    on_bounds = _step_split_boundaries(results, probe=True)
+    off_bounds = _step_split_boundaries(results, probe=False)
+    n_on, n_off = len(on_bounds), len(off_bounds)
+    # Component medians over probe-on boundaries (declaration-update steps only).
+    body: list[tuple[str, ...]] = []
+    for name, key, digits in (
+        ("propagation", "propagation_ms", 1),
+        ("svid_reissue", "svid_reissue_ms", 1),
+        ("probe", "probe_ms", 1),
+        ("other", "other_ms", 1),
+        ("d (CNP Valid wait)", "d_ms", 1),
+        ("boundary total (probe on)", "boundary_ms", 1),
+    ):
+        values = [float(b.get(key) or 0.0) for b in on_bounds]
+        stat = median_iqr_ci(values)
+        body.append((name, str(n_on), _fmt_median_iqr(stat, digits)))
+    if off_bounds:
+        stat = median_iqr_ci([float(b.get("boundary_ms") or 0.0) for b in off_bounds])
+        body.append(("boundary total (probe off)", str(n_off), _fmt_median_iqr(stat, 1)))
+    header = _md_lines(
+        "| component | n (boundaries) | median [IQR] ms |",
+        "| --- | ---: | --- |",
+        body or [(_EMDASH, _EMDASH, _EMDASH)],
+    )
+    return header
 
 
 def emit_redeclaration_markdown(results: list[dict[str, Any]]) -> str:
@@ -1137,102 +1356,94 @@ def emit_redeclaration_latex(results: list[dict[str, Any]]) -> str:
 
 
 def emit_step_split_markdown(results: list[dict[str, Any]]) -> str:
-    rows = _step_split_results(results)
+    on_bounds = _step_split_boundaries(results, probe=True)
+    off_bounds = _step_split_boundaries(results, probe=False)
+    caption = _step_split_caption(results, len(on_bounds) + len(off_bounds), len(on_bounds), len(off_bounds))
     return "\n".join(
         [
-            "# Per-step cost split (M4 Q4 / G8)",
+            "# Per-step cost split (Task 31)",
             "",
-            source_caption(rows, "step-split"),
+            caption,
             "",
             table_step_split(results),
-            "",
-            "Columns are totals over step boundaries. `other` is residual after SVID reissue, policy propagation, and probe. Sums must reconcile with observed boundary duration within 5%.",
             "",
         ]
     )
 
 
 def emit_step_split_latex(results: list[dict[str, Any]]) -> str:
-    rows = _step_split_results(results)
-    body = []
-    for r in sorted(
-        rows,
-        key=lambda x: (
-            0 if (x.get("observer") or {}).get("probe", True) else 1,
-            int(x.get("seed") or 0),
-        ),
-    ):
-        split = r.get("step_cost_split") or {}
-        totals = split.get("totals") or {}
-        probe_on = (r.get("observer") or {}).get("probe")
-        if probe_on is None:
-            probe_on = split.get("probe_enabled")
-        body.append(
-            (
-                "on" if probe_on else "off",
-                str(r.get("seed")),
-                f"{float(totals.get('propagation_ms') or 0.0):.1f}",
-                f"{float(totals.get('svid_reissue_ms') or 0.0):.1f}",
-                f"{float(totals.get('probe_ms') or 0.0):.1f}",
-                f"{float(totals.get('other_ms') or 0.0):.1f}",
-                f"{float(totals.get('boundary_ms') or 0.0):.1f}",
-                f"{float(split.get('reconcile_error_pct') or 0.0):.2f}",
-            )
-        )
-    return _tex_tabular(
-        rows,
-        "Step cost split",
-        "lrrrrrrr",
-        r"probe & seed & prop (ms) & SVID (ms) & probe (ms) & other (ms) & boundary (ms) & err \%",
-        body,
-    )
+    on_bounds = _step_split_boundaries(results, probe=True)
+    off_bounds = _step_split_boundaries(results, probe=False)
+    caption = _step_split_caption(
+        results, len(on_bounds) + len(off_bounds), len(on_bounds), len(off_bounds)
+    ).strip("*")
+    md_rows = []
+    table = table_step_split(results)
+    for line in table.splitlines()[2:]:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 3:
+            md_rows.append(tuple(cells[:3]))
+    lines = [
+        "% --- Step cost split (Task 31) ---",
+        f"% {caption}",
+        r"\begin{tabular}{lrl}",
+        r"component & $n$ (boundaries) & median [IQR] (ms) \\",
+        r"\hline",
+    ]
+    for row in md_rows:
+        lines.append(" & ".join(_latex_cell(c) for c in row) + r" \\")
+    lines.append(r"\end{tabular}")
+    return "\n".join(lines) + "\n"
 
 
 def emit_markdown(results: list[dict[str, Any]]) -> str:
+    task = _task_results(results)
+    step = _step_results(results)
+    sweep = _sweep_results(results)
     parts = [
         "# Manuscript tables",
         "",
-        source_caption(results, "all tables"),
+        source_caption(task, "all tables"),
         "",
         "## Reach",
         "",
-        source_caption(results, "Reach"),
+        source_caption(task, "Reach"),
         "",
         table_reach(results),
         "",
         "## Rollback",
         "",
-        source_caption(results, "Rollback"),
+        source_caption(task, "Rollback"),
         "",
         table_rollback(results),
         "",
         "## Overhead",
         "",
-        source_caption(results, "Overhead"),
+        source_caption(task, "Overhead"),
         "",
         table_overhead(results),
         "",
         "## Credentials (Q2)",
         "",
-        source_caption(results, "Credentials"),
+        source_caption(task, "Credentials"),
         "",
         table_credentials(results),
         "",
         "## Segment p/q/d (Q4)",
         "",
-        source_caption(results, "Segment"),
+        source_caption(task, "Segment"),
         "",
         table_segment(results),
         "",
         "## Step granularity",
         "",
-        source_caption(results, "Step"),
+        source_caption(step, "Step"),
         "",
         table_step(results),
         "",
         "## Dispersion (M6)",
         "",
-        source_caption(_task_results(results), "Dispersion"),
+        source_caption(task, "Dispersion"),
         "",
         table_dispersion(results),
         "",
@@ -1240,13 +1451,13 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
         "",
         "## Sweep (k/|S|)",
         "",
-        source_caption(_sweep_results(results), "Sweep"),
+        source_caption(sweep, "Sweep"),
         "",
         table_sweep(results),
         "",
         "## Q2 series",
         "",
-        source_caption(results, "Q2"),
+        source_caption(task, "Q2"),
         "",
         "| seed | mode | \\|S\\| | declared | extra |",
         "| ---: | --- | ---: | ---: | ---: |",
@@ -1260,13 +1471,16 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
 
 def emit_latex(results: list[dict[str, Any]]) -> str:
     """LaTeX-ready tabular rows for the manuscript. Same numbers as emit_markdown."""
+    task = _task_results(results)
+    step = _step_results(results)
+    sweep = _sweep_results(results)
     parts = [
         "% Manuscript tables (LaTeX-ready rows from make paper-tables)",
-        f"% {source_caption(results, 'all tables').strip('*')}",
+        f"% {source_caption(task, 'all tables').strip('*')}",
         "% Paste into Paper 1 tabulars. Simulator/fixture numbers must not be used.",
         "",
         _tex_tabular(
-            results,
+            task,
             "Reach",
             "lrrrrrr",
             r"mode & $n$ & mean $|S|$ & min & max & mean extra & mean $R_w$",
@@ -1274,7 +1488,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Rollback",
             "llrrr",
             r"mode & class & mean $\rho_{\mathrm{rev}}$ & mean $n$ & mean restored/quarantined/escalated",
@@ -1282,7 +1496,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Overhead",
             "lrrr",
             r"mode & $n$ & mean verify\_ms & mean relative vs same-seed flat",
@@ -1290,7 +1504,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Credentials",
             "lrrrr",
             r"mode & $n$ & mean $\tau$ (s) & mean $T$ (s) & mean $\tau/T$",
@@ -1298,7 +1512,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Segment",
             "lrrrrr",
             r"mode & $n$ & mean $p$ (ms) & mean $q$ (ms) & mean $d$ (ms) & max $d$ (ms)",
@@ -1306,7 +1520,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            step,
             "Step",
             "rrrrr",
             r"seed & mean $\tau/T$ & max $\tau/T$ & mean $d$ (ms) & max $d$ (ms)",
@@ -1314,7 +1528,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            _task_results(results),
+            task,
             "Dispersion",
             "llrrr",
             r"mode & metric & $n$ & median [IQR] & bootstrap 95\% CI",
@@ -1322,7 +1536,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Q2 series",
             "rlrrr",
             r"seed & mode & $|S|$ & declared & extra",
@@ -1330,7 +1544,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            sweep,
             "Sweep",
             "rrrrrrr",
             r"$k$ & $n$ & mean $|R|$ & min $|R|$ & max $|R|$ & mean $R_w$ & mean $|B \cap R|$",
@@ -1338,7 +1552,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            sweep,
             "Sweep seeds",
             "lrrrrr",
             r"variant & seed & $k$ & $|R|$ & $R_w$ & $|B \cap R|$",
@@ -1456,7 +1670,7 @@ def write_q2_figure(results: list[dict[str, Any]], out_dir: Path) -> Path | None
     fig.text(
         0.5,
         0.01,
-        source_caption(results, "Q2 reachable-set figure").strip("*"),
+        source_caption(_task_results(results), "Q2 reachable-set figure").strip("*"),
         ha="center",
         fontsize=8,
     )
@@ -1480,7 +1694,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--table",
         default="",
-        help="optional table selector (sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion). empty = Paper 1 headline tables",
+        help="optional table selector (sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion, credential). empty = Paper 1 headline tables",
     )
     args = parser.parse_args(argv)
     results = load_results(args.results)
@@ -1515,6 +1729,11 @@ def main(argv: list[str] | None = None) -> int:
         if not gated:
             print("refusing step-split table: no step_cost_split results", file=sys.stderr)
             return 1
+    elif table in ("credential", "credentials", "tau"):
+        gated = _credential_table_results(results)
+        if not gated:
+            print("refusing credential table: no flat/full/full-step results", file=sys.stderr)
+            return 1
     elif table in ("dispersion", "median", "iqr"):
         gated = [
             r
@@ -1528,23 +1747,32 @@ def main(argv: list[str] | None = None) -> int:
             print("refusing dispersion table: no task or gateway results", file=sys.stderr)
             return 1
     elif table in ("", "all"):
-        gated = [
-            r
-            for r in results
-            if not _is_sweep(r)
-            and not _is_data_intensive(r)
-            and not _is_gateway(r)
-            and not _is_redeclaration(r)
-            and not _is_step_split(r)
-        ]
+        gated = _headline_results(results)
     else:
         print(
-            f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion)",
+            f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion, credential)",
             file=sys.stderr,
         )
         return 2
     try:
         assert_cluster_provenance(gated)
+        if table in ("credential", "credentials", "tau"):
+            by_cell: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for row in gated:
+                by_cell[_credential_cell(row)].append(row)
+            for _cell, cell_rows in by_cell.items():
+                assert_tau_definitions_consistent(cell_rows)
+            bad = [
+                r
+                for r in gated
+                if _credential_cell(r) in ("full", "full-step")
+                and normalize_tau_definition(r) != TAU_JWT
+            ]
+            if bad:
+                raise ProvenanceError(
+                    "refusing TABLE=credential: every full and full-step row must carry "
+                    "tau_definition jwt_ttl; mixed or issue→revoke rows present"
+                )
     except ProvenanceError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -1611,6 +1839,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             text = emit_step_split_markdown(results)
             out_path = args.out / "step-split.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table in ("credential", "credentials", "tau"):
+        if args.format == "latex":
+            text = emit_credential_latex(results)
+            out_path = args.out / "credential.tex"
+        else:
+            text = emit_credential_markdown(results)
+            out_path = args.out / "credential.md"
         out_path.write_text(text)
         print(text)
         print(f"wrote {out_path}")

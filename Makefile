@@ -54,7 +54,7 @@ paper-tables: ## LaTeX-ready rows; same cluster / variance / span-count gate as 
 
 paper-tables-all: ## Headline tables plus every TABLE= selector (cluster provenance gate)
 	$(MAKE) paper-tables
-	@for t in dispersion sweep evasion gateway redeclaration step-split data-intensive; do \
+	@for t in dispersion sweep evasion gateway redeclaration step-split data-intensive credential; do \
 	  $(MAKE) paper-tables TABLE=$$t; \
 	done
 
@@ -71,7 +71,7 @@ run: ## Execute one profile (PROFILE MODE SEED GRANULARITY VARIANT PROBE STEP_SP
 	GRANULARITY=$(GRANULARITY) VARIANT=$(VARIANT) GATEWAY_BYPASS=$(GATEWAY_BYPASS) PROBE=$(PROBE) STEP_SPLIT=$(STEP_SPLIT) $(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED) --granularity $(GRANULARITY) $(if $(VARIANT),--variant $(VARIANT),) $(if $(filter 1 true yes,$(GATEWAY_BYPASS)),--gateway-bypass,) $(if $(filter 0 false no off,$(PROBE)),--no-probe,) $(if $(filter 1 true yes,$(STEP_SPLIT)),--step-split,)
 
 campaign: ## Resume-on-failure campaign; per-run provenance (PROFILE MODES SEEDS GRANULARITY)
-	$(PYTHON) $(ROOT)/scripts/campaign.py --profile $(PROFILE) --modes '$(or $(MODES),flat,full)' --seeds '$(SEEDS)' --granularity '$(GRANULARITY)' --wait-idle
+	$(PYTHON) $(ROOT)/scripts/campaign.py --profile $(PROFILE) --modes '$(or $(MODES),flat,full)' --seeds '$(SEEDS)' --granularity '$(GRANULARITY)' --wait-idle $(if $(filter 0 false no off,$(PROBE)),--no-probe,) $(if $(filter 1 true yes,$(STEP_SPLIT)),--step-split,)
 
 stores-smoke: ## Write and read one object per store; confirm history/versioning
 	$(PYTHON) $(ROOT)/scripts/stores_smoke.py

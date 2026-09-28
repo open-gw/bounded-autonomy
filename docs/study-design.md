@@ -297,3 +297,38 @@ One integer seed controls:
 3. any sampling inside exporters
 
 Paper 1 seeds: `1, 2, 3, 4, 5`.
+
+---
+
+## Amendment 28 September 2026 (Task 31)
+
+Dated amendment. Does not silently rewrite §§4.1–4.4. Paper 2 is out of scope.
+
+### Declared duration
+
+`expected_task_duration_s` / `expected_duration_seconds` and `expected_step_duration_s` / `expected_step_duration_seconds` are computed from the seeded step plan and `rig/agent/duration_policy.yaml`:
+
+- per-step budget = p95 of that tool's Task 26 campaign `verify` span duration × 3, floored at 500 ms
+- task duration = sum of step budgets × 1.5, then ceil to whole seconds
+- JWT-SVID TTL = declared task duration (task granularity) or declared step duration (step granularity), then `max(requested, SPIRE minimum TTL)` (1 s in SPIRE 1.15)
+- Requested and granted TTLs are recorded on the run
+- A declaration without a duration fails validation. There is no 1800 s default
+
+### Credential metrics
+
+- `τ = exp − iat` of the JWT-SVID used for the task (or per step). Canonical `tau_definition` is `jwt_ttl`.
+- `credential_ratio = τ / T` with `T` = first to last tool call
+- `residual_credential_s = exp − task_end` (or per step): how long the credential outlived the work. Primary reported figure
+- `residual_reach_ms = policy_removed_at − task_end`: how long the segment outlived the work. Reported alongside
+- Flat baseline unchanged: 24 h ServiceAccount token, `τ = 86400` s
+- `make paper-tables TABLE=credential` refuses to aggregate a cell that mixes `tau_definition` values (JWT TTL vs issue→revoke). Paper 1 `TABLE=` headline tables are not rewritten.
+
+### `d` versus `propagation` (step-split)
+
+These are two instruments, not one clock with two names.
+
+- **`d` (controller p/q/d):** timestamp pair `cnp_wait_started → cnp_valid`. Host poll of the egress CNP until `status.conditions[type=Valid]=True`. Same instrument as Task 26 `d_ms_mean` / `d_ms_max` / `policy_propagation_ms`.
+- **`propagation` (step-split):** timestamp pair `declaration_applied → first_enforced`. `declaration_applied` is when `kubectl apply` of the TaskDeclaration + CNP returns; `first_enforced` is the same CNP Valid observation. SPIRE mint and APISIX updates are not on this clock (they sit in `other` / `svid_reissue`).
+
+Per boundary, `propagation + svid_reissue + probe + other` equals `boundary_ms` within 5%. Units are per boundary. The table caption states the number of boundaries (injection step 15 has no declaration update and is omitted: 29 per seed).
+

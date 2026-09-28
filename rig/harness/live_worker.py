@@ -103,6 +103,7 @@ def run_steps(
     outcomes: list[dict] = []
     last_result: dict | None = None
     first_call_epoch: float | None = None
+    last_call_epoch: float | None = None
     span_cm = tr.start_as_current_span("run", start_time=start_ns) if with_root else None
     span = span_cm.__enter__() if span_cm else None
     if span is not None:
@@ -142,6 +143,7 @@ def run_steps(
                 spiffe_id=spiffe_id,
                 gateway_bypass=gateway_bypass,
             )
+            last_call_epoch = time.time()
             last_result = out if out.get("ok") else {"denied": True, "tool": tool}
             outcomes.append({"step": step.index, "tool": tool, "ok": bool(out.get("ok"))})
     finally:
@@ -156,6 +158,7 @@ def run_steps(
         "start_epoch": start,
         "end_epoch": end,
         "first_call_epoch": first_call_epoch,
+        "last_call_epoch": last_call_epoch,
         "outcomes": outcomes,
         "started_at": datetime.fromtimestamp(start, timezone.utc).isoformat(),
         "finished_at": datetime.fromtimestamp(end, timezone.utc).isoformat(),

@@ -152,6 +152,8 @@ def extra_errors(doc: dict, inventory: set[str]) -> list[str]:
                 f"redeclaration initial declared must be [records, search, notify]; got {declared}"
             )
 
+    if spec.get("expected_duration_seconds") in (None, 0, ""):
+        errors.append("declaration lacks expected_duration_seconds")
     observer = spec.get("observer") or {}
     if "probe" in observer and not isinstance(observer.get("probe"), bool):
         errors.append("spec.observer.probe must be a boolean")
@@ -225,6 +227,21 @@ def _extra_errors_result_q4(doc: dict) -> list[str]:
                 )
         except (TypeError, ValueError):
             errors.append("step_cost_split.totals are not numeric")
+        for b in split.get("boundaries") or []:
+            try:
+                accounted_b = (
+                    float(b.get("propagation_ms") or 0)
+                    + float(b.get("svid_reissue_ms") or 0)
+                    + float(b.get("probe_ms") or 0)
+                    + float(b.get("other_ms") or 0)
+                )
+                observed_b = float(b.get("boundary_ms") or 0)
+                if observed_b > 0 and abs(accounted_b - observed_b) / observed_b * 100.0 > 5.0:
+                    errors.append(
+                        f"step_cost_split boundary step={b.get('step')} does not reconcile within 5%"
+                    )
+            except (TypeError, ValueError):
+                errors.append("step_cost_split boundary clocks are not numeric")
     if doc.get("profile") == "redeclaration":
         if doc.get("redeclaration_cost_ms") is None:
             errors.append("redeclaration result requires redeclaration_cost_ms")

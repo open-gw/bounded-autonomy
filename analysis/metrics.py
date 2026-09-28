@@ -277,16 +277,31 @@ def step_cost_split(
         accounted = prop + svid + probe + other
         if observed <= 0:
             observed = accounted
-        rows.append(
-            {
-                "step": int(raw.get("step") or 0),
-                "propagation_ms": prop,
-                "svid_reissue_ms": svid,
-                "probe_ms": probe,
-                "other_ms": other,
-                "boundary_ms": observed,
-            }
-        )
+        if observed > 0:
+            row_err = abs(accounted - observed) / observed * 100.0
+        else:
+            row_err = 0.0
+        d_ms = float(raw["d_ms"]) if raw.get("d_ms") is not None else prop
+        row: dict[str, Any] = {
+            "step": int(raw.get("step") or 0),
+            "propagation_ms": prop,
+            "svid_reissue_ms": svid,
+            "probe_ms": probe,
+            "other_ms": other,
+            "boundary_ms": observed,
+            "d_ms": d_ms,
+            "reconcile_error_pct": row_err,
+            "reconcile_ok": row_err <= tolerance_pct,
+        }
+        for key in (
+            "declaration_updated_at_epoch",
+            "first_enforced_at_epoch",
+            "cnp_wait_started_epoch",
+            "cnp_valid_epoch",
+        ):
+            if raw.get(key) is not None:
+                row[key] = float(raw[key])
+        rows.append(row)
     totals = {
         "propagation_ms": sum(r["propagation_ms"] for r in rows),
         "svid_reissue_ms": sum(r["svid_reissue_ms"] for r in rows),
@@ -301,14 +316,13 @@ def step_cost_split(
         + totals["other_ms"]
     )
     observed = totals["boundary_ms"]
-    if observed <= 0:
-        error_pct = 0.0
-    else:
-        error_pct = abs(accounted - observed) / observed * 100.0
+    error_pct = abs(accounted - observed) / observed * 100.0 if observed > 0 else 0.0
+    per_ok = all(bool(r.get("reconcile_ok")) for r in rows) if rows else True
+    max_row = max((float(r.get("reconcile_error_pct") or 0.0) for r in rows), default=0.0)
     return {
         "probe_enabled": bool(probe_enabled),
         "boundaries": rows,
         "totals": totals,
-        "reconcile_error_pct": error_pct,
-        "reconcile_ok": error_pct <= tolerance_pct,
+        "reconcile_error_pct": max(error_pct, max_row),
+        "reconcile_ok": error_pct <= tolerance_pct and per_ok,
     }
