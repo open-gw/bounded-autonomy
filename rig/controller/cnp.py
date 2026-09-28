@@ -189,6 +189,18 @@ def render_cnp(
             "endpointSelector": {"matchLabels": {TASK_LABEL: task_id}},
             "enableDefaultDeny": {"egress": True},
             "egress": egress,
+            # reserved:host / kube-apiserver are not covered by default-deny
+            # alone on this datapath; rows 6–7 need an explicit deny.
+            "egressDeny": [
+                {
+                    "toEntities": [
+                        "world",
+                        "host",
+                        "remote-node",
+                        "kube-apiserver",
+                    ]
+                }
+            ],
         },
     }
     return {"egress": egress_cnp, "ingress": ingress_for_services}

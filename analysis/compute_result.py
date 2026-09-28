@@ -12,6 +12,7 @@ from metrics import (
     credential_ratio,
     reachable_set,
     rollback_completeness,
+    step_cost_split,
     verification_overhead,
 )
 try:
@@ -200,6 +201,22 @@ def compute_result(
     }
     if evasion_matrix:
         result["evasion_matrix"] = evasion_matrix
+    if meta.get("redeclaration_cost_ms") is not None:
+        result["redeclaration_cost_ms"] = float(meta["redeclaration_cost_ms"])
+        result["steps_reexecuted"] = int(meta.get("steps_reexecuted") or 0)
+        committed = meta.get("writes_committed_before_termination")
+        if committed is not None:
+            result["writes_committed_before_termination"] = bool(committed)
+    probe_flag = meta.get("probe_enabled")
+    if probe_flag is False:
+        result["observer"] = {"probe": False}
+    elif probe_flag is True and (meta.get("step_boundaries") or meta.get("step_split")):
+        result["observer"] = {"probe": True}
+    boundaries = list(meta.get("step_boundaries") or [])
+    if boundaries or meta.get("step_split"):
+        result["step_cost_split"] = step_cost_split(
+            boundaries, probe_enabled=bool(probe_flag if probe_flag is not None else True)
+        )
     return result
 
 

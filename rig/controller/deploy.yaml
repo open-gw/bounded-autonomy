@@ -64,3 +64,7 @@ spec:
               value: spire
             - name: BA_SPIRE_PARENT
               value: spiffe://rig/spire/agent/k8s_psat/bounded-autonomy/k3d-bounded-autonomy-server-0
+            - name: BA_APISIX_ADMIN
+              value: http://apisix-admin.apisix.svc.cluster.local:9180
+            - name: BA_APISIX_ADMIN_KEY
+              value: ba-rig-admin-key

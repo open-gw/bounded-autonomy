@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from agent.orchestrator import pick_from_injection, pick_tool
+from agent.orchestrator import UndeclaredTool, pick_from_injection, pick_tool
 from harness.payloads import load_payload
 from modes import deploys_gateway_policy, uses_flat_credential, uses_gateway_path, uses_segment
 from plan import DEFAULT_DECLARED, build_step_plan
@@ -66,6 +67,8 @@ def run_local(
     three_store: bool | None = None,
     shared_overwrite_key: str | None = None,
     gateway_bypass: bool = False,
+    probe_enabled: bool = True,
+    step_split: bool = False,
 ) -> dict[str, Any]:
     started = datetime.now(timezone.utc)
     spec = profile_spec(profile)
@@ -77,8 +80,18 @@ def run_local(
     three = spec["three_store"] if three_store is None else three_store
     inject_step = spec["injection_at"] if injection_at is None else injection_at
     payload_ver = payload_version or spec["payload_version"]
+    redeclare_at = spec.get("redeclare_at")
+    redeclare_tool = spec.get("redeclare_tool") or "docs"
+    if spec.get("injection_enabled") is False:
+        injection = False
     plan = build_step_plan(
-        seed, steps=steps, write_mix=mix, declared=declared, three_store=three
+        seed,
+        steps=steps,
+        write_mix=mix,
+        declared=declared,
+        three_store=three,
+        redeclare_at=redeclare_at,
+        redeclare_tool=redeclare_tool,
     )
     payload = load_payload(payload_ver, seed) if injection else None
     overwrite_key = shared_overwrite_key or (
@@ -115,6 +128,8 @@ def run_local(
         )
 
     def probe(step: int) -> None:
+        if not probe_enabled:
+            return
         for svc in INVENTORY:
             ok = _connect(mode, svc, declared, gateway_bypass)
             probe_rows.append({"step": step, "service": svc, "success": ok})
@@ -127,13 +142,52 @@ def run_local(
                     }
                 )
 
+    def record_call_flow(dest: str) -> None:
+        if probe_enabled:
+            return
+        flow_rows.append(
+            {
+                "source_spiffe": spiffe,
+                "destination_service": dest,
+                "verdict": "FORWARDED",
+            }
+        )
+
     probe(0)
 
     overwrite_pending = bool(overwrite_key and profile == "data-intensive")
     drifted_store: str | None = None
+    redeclaration_cost_ms: float | None = None
+    steps_reexecuted = 0
+    writes_committed_before_termination: bool | None = None
+    keys_before: dict[str, set[str]] | None = None
+    step_boundaries: list[dict[str, Any]] = []
 
     for step in plan:
-        tool = pick_tool(step.instruction, declared, last_result)
+        try:
+            tool = pick_tool(step.instruction, declared, last_result)
+        except UndeclaredTool as exc:
+            if redeclare_at is None or step.index != int(redeclare_at):
+                raise
+            termination = time.time()
+            keys_before = {
+                "postgres": set(postgres.live),
+                "minio": set(minio.objects),
+                "qdrant": set(qdrant.points),
+            }
+            if exc.tool not in declared:
+                declared = list(declared) + [exc.tool]
+            # Re-provision / re-bind cost in-process (cluster overwrites this).
+            time.sleep(0.01)
+            first_call = time.time()
+            redeclaration_cost_ms = (first_call - termination) * 1000.0
+            writes_committed_before_termination = (
+                keys_before["postgres"] <= set(postgres.live)
+                and keys_before["minio"] <= set(minio.objects)
+                and keys_before["qdrant"] <= set(qdrant.points)
+            )
+            steps_reexecuted = 0
+            tool = exc.tool
         operation = step.operation
         key = f"{step.write_class}-{step.index}"
         value: Any = {"step": step.index, "seed": seed}
@@ -211,6 +265,21 @@ def run_local(
             last_result = {"denied": True, "tool": tool}
             steps_completed += 1
             probe(step.index)
+            if step_split or granularity == "step":
+                prop = 12.0 + (step.index % 3)
+                svid = 8.0 + (step.index % 2)
+                probe_ms = 20.0 if probe_enabled else 0.0
+                other = 3.0
+                step_boundaries.append(
+                    {
+                        "step": step.index,
+                        "propagation_ms": prop,
+                        "svid_reissue_ms": svid,
+                        "probe_ms": probe_ms,
+                        "other_ms": other,
+                        "boundary_ms": prop + svid + probe_ms + other,
+                    }
+                )
             continue
 
         verify_ms = (12 if mode == "full" else 2) + (step.index % 7) * 0.13
@@ -287,6 +356,7 @@ def run_local(
         )
         write_counts[outcome["write_class"]] = write_counts.get(outcome["write_class"], 0) + 1
         last_result = outcome["result"]
+        record_call_flow(tool)
         if drifted_declared:
             drifted_store = outcome["store"]
         if extra_undeclared and payload:
@@ -312,6 +382,22 @@ def run_local(
                 pass
         steps_completed += 1
         probe(step.index)
+        if step_split or granularity == "step":
+            prop = 12.0 + (step.index % 3)
+            svid = 8.0 + (step.index % 2)
+            probe_ms = 20.0 if probe_enabled else 0.0
+            other = 3.0
+            boundary = prop + svid + probe_ms + other
+            step_boundaries.append(
+                {
+                    "step": step.index,
+                    "propagation_ms": prop,
+                    "svid_reissue_ms": svid,
+                    "probe_ms": probe_ms,
+                    "other_ms": other,
+                    "boundary_ms": boundary,
+                }
+            )
 
     attestation = rollback_task(
         events=lineage_rows,
@@ -416,6 +502,11 @@ def run_local(
             "task_end_epoch": t_end,
             "policy_removed_at_epoch": None if not segment else t_end + (4.0 + seed) / 1000.0,
             "entry_deleted_at_epoch": None if not segment else t_end,
+            "redeclaration_cost_ms": redeclaration_cost_ms,
+            "steps_reexecuted": steps_reexecuted,
+            "writes_committed_before_termination": writes_committed_before_termination,
+            "probe_enabled": probe_enabled,
+            "step_boundaries": step_boundaries if (step_split or step_boundaries) else [],
         },
         baseline_spans=baseline_spans,
     )

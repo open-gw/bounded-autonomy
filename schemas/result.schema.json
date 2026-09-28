@@ -28,7 +28,7 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]{2,62}$"
     },
-    "profile": { "enum": ["long-multistep", "data-intensive"] },
+    "profile": { "enum": ["long-multistep", "data-intensive", "redeclaration"] },
     "mode": { "enum": ["flat", "full", "gateway-only", "gateway-bypass"] },
     "gateway_bypass": { "type": "boolean" },
     "seed": { "type": "integer", "minimum": 0 },
@@ -194,6 +194,17 @@
       "type": "array",
       "items": { "type": "number", "minimum": 0 }
     },
+    "redeclaration_cost_ms": { "type": ["number", "null"], "minimum": 0 },
+    "steps_reexecuted": { "type": "integer", "minimum": 0 },
+    "writes_committed_before_termination": { "type": "boolean" },
+    "observer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "probe": { "type": "boolean" }
+      }
+    },
+    "step_cost_split": { "$ref": "#/$defs/stepCostSplit" },
     "evasion_matrix": {
       "type": "array",
       "minItems": 7,
@@ -269,6 +280,59 @@
         },
         "latency_ms": { "type": "number", "minimum": 0 },
         "detail": { "type": "string" }
+      }
+    },
+    "stepCostSplit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_enabled", "boundaries", "totals", "reconcile_error_pct"],
+      "properties": {
+        "probe_enabled": { "type": "boolean" },
+        "boundaries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/stepCostBoundary" }
+        },
+        "totals": { "$ref": "#/$defs/stepCostTotals" },
+        "reconcile_error_pct": { "type": "number", "minimum": 0 },
+        "reconcile_ok": { "type": "boolean" }
+      }
+    },
+    "stepCostBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "propagation_ms",
+        "svid_reissue_ms",
+        "probe_ms",
+        "other_ms",
+        "boundary_ms"
+      ],
+      "properties": {
+        "step": { "type": "integer", "minimum": 1 },
+        "propagation_ms": { "type": "number", "minimum": 0 },
+        "svid_reissue_ms": { "type": "number", "minimum": 0 },
+        "probe_ms": { "type": "number", "minimum": 0 },
+        "other_ms": { "type": "number" },
+        "boundary_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "stepCostTotals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propagation_ms",
+        "svid_reissue_ms",
+        "probe_ms",
+        "other_ms",
+        "boundary_ms"
+      ],
+      "properties": {
+        "propagation_ms": { "type": "number" },
+        "svid_reissue_ms": { "type": "number" },
+        "probe_ms": { "type": "number" },
+        "other_ms": { "type": "number" },
+        "boundary_ms": { "type": "number" }
       }
     },
     "classIrreversible": {

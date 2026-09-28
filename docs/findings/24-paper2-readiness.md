@@ -6,7 +6,7 @@ This file is the start-here for Paper 2 after Paper 1 integrity, arXiv, and the 
 
 ## Hard gates
 
-- **Task 24+ cannot be specced until G1–G9 exist.** Later task numbers assume a rig that can run four profiles, three modes, a delegation chain, Plane 3 checks, a model-driven agent, and injection variance. Speccing those tasks against the Paper 1 one-profile / two-mode / one-agent tree would freeze the wrong contract.
+- **G1 is Task 24 (Apache APISIX).** G2–G9 remain the gate for later Paper 2 campaign tasks. Speccing those against the Paper 1 one-profile / two-mode / one-agent tree would freeze the wrong contract.
 - **Freeze study-design at `paper2-prereg`.** `docs/study-design.md` remains the Paper 1 contract. Paper 2 gets its own analysis notebook and a tagged freeze (`paper2-prereg`) *before* the first campaign run (P3, P4). Any later change is an amendment with a reason, not a silent edit.
 - **Citation.** Paper 2 cites the Paper 1 preprint DOI [10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531) until proceedings exist. Do not invent a proceedings citation. Repository DOI (Task 22) is a related identifier, not a substitute for the preprint.
 
@@ -20,7 +20,7 @@ Paper 1 figures stay out of Paper 2 (P6).
 
 | # | Gap | Why Paper 2 needs it | Size | Status |
 | --- | --- | --- | --- | --- |
-| G1 | **Gateway-only mode.** No gateway exists in the rig. Paper 2’s second baseline is “gateway policy on, no segmentation, no service-side checks.” | Without it the study compares only `flat` vs `full` and cannot say what the gateway alone buys. | Medium: deploy Envoy Gateway or APISIX with a signed tool registry and an allow-list; route agent calls through it in `gateway-only` and `full` modes. | Not built. Clean-room: Envoy Gateway or APISIX, **not Kong**. |
+| G1 | **Gateway-only mode.** Paper 2’s second baseline is “gateway policy on, no segmentation, no service-side checks.” | Without it the study compares only `flat` vs `full` and cannot say what the gateway alone buys. | Medium: Apache APISIX + `uri-blocker` allow-list; agent through APISIX in `gateway-only` and `full`. | Built in Task 24. See [`24-apisix.md`](24-apisix.md). Not Kong. |
 | G2 | **Delegation chain profile.** The rig has one agent and no sub-agents. `chain_depth` 2–5 requires sub-agent processes, per-hop token exchange, and a provenance record that services verify. | Verification overhead by chain depth is a headline result; the predictive test also needs multi-hop breach paths. | Large: sub-agent runtime, exchange service (RFC 8693 shape) on SPIRE, provenance record format, hop signing. | Not built. **Critical path — start here.** |
 | G3 | **Plane 3 verification implemented in full.** The current `verify` span covers audience check and task-scoped filtering only (`rig/tools/dispatch.py`). Provenance chain check and monotonic-narrowing check do not exist in code. | Paper 2 measures the cost of the four checks per hop; two of the four are not built. This is also the reduction to practice for claims 11–13. | Medium, depends on G2 for the chain to verify. | Not built. Blocked on G2. |
 | G4 | **Data-intensive profile.** Qdrant writes exist, but the profile needs all three stores in one task with a 20/30/40/10 mix and derived-write volume high enough to stress quarantine. | Rollback completeness by write mix is a headline result. | Small: step-plan generator for the profile; Qdrant snapshot cadence. | Not built. |

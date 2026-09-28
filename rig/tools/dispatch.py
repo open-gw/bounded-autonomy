@@ -29,9 +29,16 @@ class SegmentDenied(Exception):
         self.tool = tool
 
 
+class GatewayDenied(Exception):
+    def __init__(self, tool: str):
+        super().__init__(f"gateway uri-blocker 403 for {tool}")
+        self.tool = tool
+        self.status = 403
+
+
 def verify_audience(*, mode: str, tool: str, declared: list[str], spiffe_id: str) -> dict:
-    """Return a verify-span payload. In flat mode the check is a recorded no-op."""
-    ok = True if mode == "flat" else tool in declared
+    """Return a verify-span payload. L7 audience is a no-op unless mode is full."""
+    ok = True if mode != "full" else tool in declared
     return {
         "name": "verify",
         "mode": mode,

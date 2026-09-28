@@ -1,0 +1,54 @@
+# Apache APISIX Helm values. Pins live in rig/versions.yaml.
+# Chart: https://apache.github.io/apisix-helm-chart  (official docs)
+# Plugin docs: https://apisix.apache.org/docs/apisix/plugins/uri-blocker/
+fullnameOverride: apisix
+image:
+  repository: apache/apisix
+  tag: 3.18.0-ubuntu
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+useDaemonSet: false
+
+service:
+  # NodePort: helm chart 2.17.0 always emits externalTrafficPolicy,
+  # which is invalid on ClusterIP. In-cluster DNS still uses the ClusterIP.
+  type: NodePort
+  http:
+    enabled: true
+    containerPort: 9080
+    servicePort: 9080
+
+ingress-controller:
+  enabled: false
+
+etcd:
+  enabled: false
+
+externalEtcd:
+  host:
+    - http://etcd.apisix.svc.cluster.local:2379
+  user: ""
+
+apisix:
+  enableIPv6: false
+  admin:
+    enabled: true
+    type: ClusterIP
+    port: 9180
+    servicePort: 9180
+    allow:
+      ipList:
+        - 0.0.0.0/0
+    credentials:
+      admin: ba-rig-admin-key
+      viewer: ba-rig-viewer-key
+    enable_admin_ui: false
+  nginx:
+    enableCPUAffinity: false
+    workerProcesses: "1"
+    logs:
+      enableAccessLog: true
+      accessLog: /dev/stdout
+      accessLogFormat: '{"time":"$time_iso8601","client":"$remote_addr","host":"$http_host","uri":"$uri","request":"$request","status":$status,"upstream":"$upstream_addr"}'
+      accessLogFormatEscape: json

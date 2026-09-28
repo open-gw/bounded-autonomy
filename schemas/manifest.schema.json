@@ -39,7 +39,7 @@
         "cluster"
       ],
       "properties": {
-        "profile": { "enum": ["long-multistep", "data-intensive"] },
+        "profile": { "enum": ["long-multistep", "data-intensive", "redeclaration"] },
         "variant": { "enum": ["k1", "k3", "k5", "k7"] },
         "mode": { "enum": ["flat", "full", "gateway-only", "gateway-bypass"] },
         "gateway_bypass": { "type": "boolean" },
@@ -109,6 +109,13 @@
           }
         },
         "granularity": { "enum": ["task", "step"] },
+        "observer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "probe": { "type": "boolean" }
+          }
+        },
         "cluster": {
           "type": "object",
           "additionalProperties": false,

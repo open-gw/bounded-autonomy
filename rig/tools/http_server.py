@@ -43,7 +43,7 @@ def call(
 ) -> dict:
     if not x_spiffe_id:
         raise HTTPException(401, "missing presented SVID")
-    mode = x_rig_mode if x_rig_mode in ("flat", "full") else "full"
+    mode = x_rig_mode if x_rig_mode in ("flat", "full", "gateway-only", "gateway-bypass") else "full"
     tr = _tracer()
     with tr.start_as_current_span("verify") as span:
         span.set_attribute("mode", mode)

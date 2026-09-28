@@ -55,6 +55,12 @@ def test_cnp_allows_only_declared_services():
     assert dests[:3] == ["records", "search", "notify"]
     assert "otel-collector" in dests
     assert egress["spec"]["enableDefaultDeny"] == {"egress": True}
+    assert set(egress["spec"]["egressDeny"][0]["toEntities"]) == {
+        "world",
+        "host",
+        "remote-node",
+        "kube-apiserver",
+    }
     dns_rules = []
     for rule in egress["spec"]["egress"]:
         for port in rule.get("toPorts") or []:

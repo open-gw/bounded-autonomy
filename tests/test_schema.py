@@ -34,6 +34,9 @@ def test_example_manifests_validate():
         "long-multistep-gateway-only.yaml",
         "long-multistep-gateway-bypass.yaml",
         "long-multistep-full-bypass.yaml",
+        "redeclaration-full.yaml",
+        "long-multistep-full-step-noprobe.yaml",
+        "long-multistep-full-step-split.yaml",
     ):
         errors = validate_manifest(MANIFESTS / name)
         assert errors == [], errors

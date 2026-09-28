@@ -45,6 +45,17 @@ telemetry:
   tempo: "2.7.2"
   tempo_image: "grafana/tempo:2.7.2"
 
+gateway:
+  product: "apache-apisix"
+  apisix: "3.18.0"
+  apisix_image: "apache/apisix:3.18.0-ubuntu"
+  helm_chart: "2.17.0"
+  helm_repo: "https://apache.github.io/apisix-helm-chart"
+  etcd: "3.5.21"
+  etcd_image: "quay.io/coreos/etcd:v3.5.21"
+  plugin: "uri-blocker"
+  admin_key: "ba-rig-admin-key"
+
 python_packages:
   jsonschema: "4.23.0"
   pyyaml: "6.0.2"

@@ -60,8 +60,22 @@ def uses_flat_credential(mode: str) -> bool:
     return normalize_mode(mode) != "full"
 
 
-def run_id_for(*, profile: str, mode: str, seed: int, granularity: str = "task", gateway_bypass: bool = False) -> str:
+def run_id_for(
+    *,
+    profile: str,
+    mode: str,
+    seed: int,
+    granularity: str = "task",
+    gateway_bypass: bool = False,
+    probe: bool = True,
+    step_split: bool = False,
+) -> str:
+    if step_split and granularity == "step":
+        tag = "step-split" if probe else "step-noprobe"
+        return f"{profile}-{mode}-{tag}-seed{seed}"
     if granularity == "step":
+        if not probe:
+            return f"{profile}-{mode}-step-noprobe-seed{seed}"
         return f"{profile}-{mode}-step-seed{seed}"
     if gateway_bypass and mode == "full":
         return f"{profile}-full-bypass-seed{seed}"

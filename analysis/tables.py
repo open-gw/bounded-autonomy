@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS = ROOT / "runs" / "results"
 FIXTURE_RESULTS = ROOT / "analysis" / "fixtures" / "results"
 _EMDASH = "\u2014"
+SWEEP_VARIANTS = ("k1", "k3", "k5", "k7")
 
 
 def load_results(results_dir: Path) -> list[dict[str, Any]]:
@@ -49,12 +50,220 @@ class ProvenanceError(Exception):
     """Manuscript tables requested from non-cluster results."""
 
 
+def _variant_of(row: dict[str, Any]) -> str | None:
+    variant = row.get("variant") or (row.get("declaration") or {}).get("variant")
+    return str(variant) if variant else None
+
+
+def _is_sweep(row: dict[str, Any]) -> bool:
+    return _variant_of(row) in SWEEP_VARIANTS
+
+
+def _is_data_intensive(row: dict[str, Any]) -> bool:
+    return str(row.get("profile") or "long-multistep") == "data-intensive"
+
+
+def _is_redeclaration(row: dict[str, Any]) -> bool:
+    return str(row.get("profile") or "") == "redeclaration"
+
+
+def _is_step_split(row: dict[str, Any]) -> bool:
+    if row.get("step_cost_split"):
+        return True
+    run_id = str(row.get("run_id") or "")
+    return "step-split" in run_id or "step-noprobe" in run_id
+
+
+def _is_gateway(row: dict[str, Any]) -> bool:
+    return row.get("mode") in ("gateway-only", "gateway-bypass") or bool(row.get("gateway_bypass"))
+
+
 def _task_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         r
         for r in results
         if (r.get("declaration") or {}).get("granularity", "task") == "task"
+        and not _is_sweep(r)
+        and not _is_data_intensive(r)
+        and not _is_gateway(r)
+        and not _is_redeclaration(r)
+        and not _is_step_split(r)
     ]
+
+
+def _data_intensive_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in results if _is_data_intensive(r)]
+
+
+def _sweep_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in results if _is_sweep(r)]
+
+
+def _evasion_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in _task_results(results)
+        if isinstance(r.get("evasion_matrix"), list) and r["evasion_matrix"]
+    ]
+
+
+def _evasion_consensus(results: list[dict[str, Any]], mode: str, row: int) -> str:
+    verdicts = []
+    for r in results:
+        if r.get("mode") != mode:
+            continue
+        for item in r.get("evasion_matrix") or []:
+            if int(item.get("row") or 0) == row:
+                verdicts.append(str(item.get("verdict") or "error"))
+    if not verdicts:
+        return _EMDASH
+    counts: dict[str, int] = {}
+    for v in verdicts:
+        counts[v] = counts.get(v, 0) + 1
+    top = max(counts.items(), key=lambda kv: (kv[1], kv[0]))
+    return f"{top[0]} ({top[1]}/{len(verdicts)})"
+
+
+_EVASION_LABELS = (
+    (1, "direct-IP declared service pod"),
+    (2, "direct-IP undeclared service pod"),
+    (3, "DNS undeclared via CoreDNS + raw UDP/53 to 1.1.1.1"),
+    (4, "external TCP/443 to 1.1.1.1"),
+    (5, "node metadata 169.254.169.254:80"),
+    (6, "kubernetes.default.svc:443 and ClusterIP"),
+    (7, "node IP kubelet :10250"),
+)
+
+
+def _evasion_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    results = _evasion_results(results)
+    rows: list[tuple[str, ...]] = []
+    for spec in ({"row": n, "label": label} for n, label in _EVASION_LABELS):
+        n = int(spec["row"])
+        rows.append(
+            (
+                str(n),
+                str(spec["label"]),
+                _evasion_consensus(results, "flat", n),
+                _evasion_consensus(results, "full", n),
+            )
+        )
+    return rows
+
+
+def table_evasion(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| row | probe | flat | full |",
+        "| ---: | --- | --- | --- |",
+        _evasion_rows(results),
+    )
+
+
+def emit_evasion_markdown(results: list[dict[str, Any]]) -> str:
+    gated = _evasion_results(results)
+    parts = [
+        "# Evasion matrix (Task 23)",
+        "",
+        source_caption(gated, "Evasion"),
+        "",
+        table_evasion(results),
+        "",
+        "DNS is restricted to CoreDNS for declared names only. External "
+        "resolver and TCP/443 target is Cloudflare `1.1.1.1`.",
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_evasion_latex(results: list[dict[str, Any]]) -> str:
+    gated = _evasion_results(results)
+    return (
+        _tex_tabular(
+            gated,
+            "Evasion",
+            "rlll",
+            r"row & probe & flat & full",
+            _evasion_rows(results),
+        )
+        + "\n"
+    )
+
+
+def _b_intersect_r(row: dict[str, Any]) -> int:
+    metrics = row.get("metrics") or {}
+    if "breach_intersection_size" in metrics:
+        return int(metrics["breach_intersection_size"])
+    breach = set(metrics.get("breach_services") or [])
+    if not breach:
+        breach = {"docs"}
+    reached = set(metrics.get("reachable_services") or [])
+    return len(breach & reached)
+
+
+def _gateway_cell(row: dict[str, Any]) -> str:
+    if row.get("mode") == "full" and row.get("gateway_bypass"):
+        return "full+bypass"
+    return str(row.get("mode") or "")
+
+
+def _gateway_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in results if _is_gateway(r)]
+
+
+def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    rows: list[tuple[str, ...]] = []
+    for row in sorted(
+        _gateway_results(results),
+        key=lambda r: (_gateway_cell(r), int(r.get("seed") or 0)),
+    ):
+        metrics = row.get("metrics") or {}
+        rows.append(
+            (
+                _gateway_cell(row),
+                str(row.get("seed") or ""),
+                str(metrics.get("reachable_set_size") or 0),
+                str(_b_intersect_r(row)),
+                str(row.get("source") or ""),
+            )
+        )
+    return rows
+
+
+def table_gateway(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | seed | \\|S\\| | \\|B ∩ R\\| | source |",
+        "| --- | ---: | ---: | ---: | --- |",
+        _gateway_rows(results),
+    )
+
+
+def emit_gateway_markdown(results: list[dict[str, Any]]) -> str:
+    gated = _gateway_results(results)
+    parts = [
+        "# Gateway modes (Task 24 / Apache APISIX)",
+        "",
+        source_caption(gated, "Gateway"),
+        "",
+        table_gateway(results),
+        "",
+        "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong.",
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_gateway_latex(results: list[dict[str, Any]]) -> str:
+    gated = _gateway_results(results)
+    return (
+        _tex_tabular(
+            gated,
+            "Gateway",
+            "lrrrl",
+            r"mode & seed & $|S|$ & $|B \cap R|$ & source",
+            _gateway_rows(results),
+        )
+        + "\n"
+    )
 
 
 def _verify_span_count_error(n_verify: int, steps: int, mode: str) -> str | None:
@@ -241,6 +450,73 @@ def table_rollback(results: list[dict[str, Any]]) -> str:
     )
 
 
+def _rho_cell(values: list[float | None]) -> str:
+    present = [float(v) for v in values if v is not None]
+    return _EMDASH if not present else f"{_mean(present):.3f}"
+
+
+def _data_intensive_rollback_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    rows: list[tuple[str, ...]] = []
+    for mode, mode_rows in sorted(_by_mode(results).items()):
+        rb = [r["metrics"]["rollback_completeness"] for r in mode_rows]
+        enums = [r["metrics"].get("rho_enum") for r in mode_rows]
+        for cls, extra_key in (
+            ("idempotent", "restored"),
+            ("versioned", "restored"),
+            ("derived", "quarantined"),
+            ("irreversible", "escalated"),
+        ):
+            rhos = [c[cls]["rho_rev"] for c in rb if c[cls]["rho_rev"] is not None]
+            ns = [c[cls]["n"] for c in rb]
+            extras = [c[cls].get(extra_key) or 0 for c in rb]
+            class_enums = [
+                c[cls].get("rho_enum")
+                if c[cls].get("rho_enum") is not None
+                else enums[i]
+                for i, c in enumerate(rb)
+            ]
+            q_rates = []
+            e_rates = []
+            for c in rb:
+                n = c[cls]["n"] or 0
+                if cls == "derived":
+                    q = c[cls].get("rho_quarantined")
+                    if q is None:
+                        q = None if n == 0 else (c[cls].get("quarantined") or 0) / n
+                    q_rates.append(q)
+                    e_rates.append(c[cls].get("rho_escalated") if c[cls].get("rho_escalated") is not None else 0.0)
+                elif cls == "irreversible":
+                    e = c[cls].get("rho_escalated")
+                    if e is None:
+                        e = None if n == 0 else (c[cls].get("escalated") or 0) / n
+                    e_rates.append(e)
+                    q_rates.append(c[cls].get("rho_quarantined") if c[cls].get("rho_quarantined") is not None else 0.0)
+                else:
+                    q_rates.append(c[cls].get("rho_quarantined") if c[cls].get("rho_quarantined") is not None else 0.0)
+                    e_rates.append(c[cls].get("rho_escalated") if c[cls].get("rho_escalated") is not None else 0.0)
+            rows.append(
+                (
+                    mode,
+                    cls,
+                    _rho_cell(class_enums),
+                    _EMDASH if not rhos else f"{_mean(rhos):.3f}",
+                    f"{_mean(ns):.1f}",
+                    _rho_cell(q_rates),
+                    _rho_cell(e_rates),
+                    f"{_mean(extras):.1f}",
+                )
+            )
+    return rows
+
+
+def table_data_intensive_rollback(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | class | mean rho_enum | mean rho_rev | mean n | mean rho_quarantined | mean rho_escalated | mean count |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        _data_intensive_rollback_rows(results),
+    )
+
+
 def _overhead_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _task_results(results)
     rows: list[tuple[str, ...]] = []
@@ -354,6 +630,8 @@ def _step_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
         r
         for r in results
         if (r.get("declaration") or {}).get("granularity") == "step"
+        and not _is_step_split(r)
+        and not _is_redeclaration(r)
     ]
     if not rows:
         return [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)]
@@ -372,11 +650,241 @@ def _step_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     return out
 
 
+def _sweep_summary_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in _sweep_results(results):
+        grouped[str(_variant_of(row))].append(row)
+    out: list[tuple[str, ...]] = []
+    for variant in SWEEP_VARIANTS:
+        rows = grouped.get(variant) or []
+        if not rows:
+            continue
+        k = int(variant[1:])
+        sizes = [int(r["metrics"]["reachable_set_size"]) for r in rows]
+        weights = [int(r["metrics"].get("reachable_weight") or 0) for r in rows]
+        inter = [_b_intersect_r(r) for r in rows]
+        out.append(
+            (
+                str(k),
+                str(len(rows)),
+                f"{_mean([float(s) for s in sizes]):.3f}",
+                str(min(sizes)),
+                str(max(sizes)),
+                f"{_mean([float(w) for w in weights]):.3f}",
+                f"{_mean([float(x) for x in inter]):.3f}",
+            )
+        )
+    return out
+
+
+def _sweep_seed_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    rows = sorted(
+        _sweep_results(results),
+        key=lambda r: (_variant_of(r) or "", int(r.get("seed") or 0)),
+    )
+    return [
+        (
+            str(_variant_of(r)),
+            str(r.get("seed")),
+            str(len(r.get("declaration", {}).get("services") or [])),
+            str(r["metrics"]["reachable_set_size"]),
+            str(r["metrics"].get("reachable_weight") or 0),
+            str(_b_intersect_r(r)),
+        )
+        for r in rows
+    ]
+
+
+def table_sweep(results: list[dict[str, Any]]) -> str:
+    parts = [
+        _md_lines(
+            "| k | n | mean \\|R\\| | min \\|R\\| | max \\|R\\| | mean R_w | mean \\|B ∩ R\\| |",
+            "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            _sweep_summary_rows(results),
+        ),
+        "",
+        _md_lines(
+            "| variant | seed | k | \\|R\\| | R_w | \\|B ∩ R\\| |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+            _sweep_seed_rows(results),
+        ),
+    ]
+    return "\n".join(parts)
+
+
 def table_step(results: list[dict[str, Any]]) -> str:
     return _md_lines(
         "| seed | mean τ/T | max τ/T | mean d (ms) | max d (ms) |",
         "| ---: | ---: | ---: | ---: | ---: |",
         _step_rows(results),
+    )
+
+
+def _redeclaration_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in results if _is_redeclaration(r)]
+
+
+def _step_split_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in results if _is_step_split(r)]
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def table_redeclaration(results: list[dict[str, Any]]) -> str:
+    rows = sorted(_redeclaration_results(results), key=lambda r: int(r.get("seed") or 0))
+    costs = [float(r.get("redeclaration_cost_ms") or 0.0) for r in rows]
+    body: list[tuple[str, ...]] = []
+    for r in rows:
+        body.append(
+            (
+                str(r.get("seed")),
+                f"{float(r.get('redeclaration_cost_ms') or 0.0):.1f}",
+                str(int(r.get("steps_reexecuted") or 0)),
+                "yes" if r.get("writes_committed_before_termination") else "no",
+                str(r.get("source") or ""),
+            )
+        )
+    parts = [
+        _md_lines(
+            "| seed | redeclaration_cost_ms | steps re-executed | writes committed | source |",
+            "| ---: | ---: | ---: | --- | --- |",
+            body or [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)],
+        ),
+        "",
+        f"Median redeclaration_cost_ms over {len(costs)} seed(s): **{_median(costs):.1f}**",
+    ]
+    return "\n".join(parts)
+
+
+def table_step_split(results: list[dict[str, Any]]) -> str:
+    rows = sorted(
+        _step_split_results(results),
+        key=lambda r: (
+            0 if (r.get("observer") or {}).get("probe", True) else 1,
+            int(r.get("seed") or 0),
+        ),
+    )
+    body: list[tuple[str, ...]] = []
+    for r in rows:
+        split = r.get("step_cost_split") or {}
+        totals = split.get("totals") or {}
+        probe_on = (r.get("observer") or {}).get("probe")
+        if probe_on is None:
+            probe_on = split.get("probe_enabled")
+        body.append(
+            (
+                "on" if probe_on else "off",
+                str(r.get("seed")),
+                f"{float(totals.get('propagation_ms') or 0.0):.1f}",
+                f"{float(totals.get('svid_reissue_ms') or 0.0):.1f}",
+                f"{float(totals.get('probe_ms') or 0.0):.1f}",
+                f"{float(totals.get('other_ms') or 0.0):.1f}",
+                f"{float(totals.get('boundary_ms') or 0.0):.1f}",
+                f"{float(split.get('reconcile_error_pct') or 0.0):.2f}",
+            )
+        )
+    return _md_lines(
+        "| probe | seed | propagation (ms) | SVID reissue (ms) | probe (ms) | other (ms) | boundary (ms) | reconcile % |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        body or [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)],
+    )
+
+
+def emit_redeclaration_markdown(results: list[dict[str, Any]]) -> str:
+    rows = _redeclaration_results(results)
+    return "\n".join(
+        [
+            "# Re-declaration cost (M4 Q4)",
+            "",
+            source_caption(rows, "redeclaration"),
+            "",
+            table_redeclaration(results),
+            "",
+        ]
+    )
+
+
+def emit_redeclaration_latex(results: list[dict[str, Any]]) -> str:
+    rows = _redeclaration_results(results)
+    costs = [float(r.get("redeclaration_cost_ms") or 0.0) for r in rows]
+    body = [
+        (
+            str(r.get("seed")),
+            f"{float(r.get('redeclaration_cost_ms') or 0.0):.1f}",
+            str(int(r.get("steps_reexecuted") or 0)),
+            "yes" if r.get("writes_committed_before_termination") else "no",
+        )
+        for r in sorted(rows, key=lambda x: int(x.get("seed") or 0))
+    ]
+    return (
+        _tex_tabular(
+            rows,
+            "Re-declaration",
+            "rrrl",
+            r"seed & cost (ms) & steps re-executed & writes committed",
+            body,
+        )
+        + f"\n% median redeclaration_cost_ms = {_median(costs):.1f}\n"
+    )
+
+
+def emit_step_split_markdown(results: list[dict[str, Any]]) -> str:
+    rows = _step_split_results(results)
+    return "\n".join(
+        [
+            "# Per-step cost split (M4 Q4 / G8)",
+            "",
+            source_caption(rows, "step-split"),
+            "",
+            table_step_split(results),
+            "",
+            "Columns are totals over step boundaries. `other` is residual after SVID reissue, policy propagation, and probe. Sums must reconcile with observed boundary duration within 5%.",
+            "",
+        ]
+    )
+
+
+def emit_step_split_latex(results: list[dict[str, Any]]) -> str:
+    rows = _step_split_results(results)
+    body = []
+    for r in sorted(
+        rows,
+        key=lambda x: (
+            0 if (x.get("observer") or {}).get("probe", True) else 1,
+            int(x.get("seed") or 0),
+        ),
+    ):
+        split = r.get("step_cost_split") or {}
+        totals = split.get("totals") or {}
+        probe_on = (r.get("observer") or {}).get("probe")
+        if probe_on is None:
+            probe_on = split.get("probe_enabled")
+        body.append(
+            (
+                "on" if probe_on else "off",
+                str(r.get("seed")),
+                f"{float(totals.get('propagation_ms') or 0.0):.1f}",
+                f"{float(totals.get('svid_reissue_ms') or 0.0):.1f}",
+                f"{float(totals.get('probe_ms') or 0.0):.1f}",
+                f"{float(totals.get('other_ms') or 0.0):.1f}",
+                f"{float(totals.get('boundary_ms') or 0.0):.1f}",
+                f"{float(split.get('reconcile_error_pct') or 0.0):.2f}",
+            )
+        )
+    return _tex_tabular(
+        rows,
+        "Step cost split",
+        "lrrrrrrr",
+        r"probe & seed & prop (ms) & SVID (ms) & probe (ms) & other (ms) & boundary (ms) & err \%",
+        body,
     )
 
 
@@ -421,6 +929,12 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
         source_caption(results, "Step"),
         "",
         table_step(results),
+        "",
+        "## Sweep (k/|S|)",
+        "",
+        source_caption(_sweep_results(results), "Sweep"),
+        "",
+        table_sweep(results),
         "",
         "## Q2 series",
         "",
@@ -499,6 +1013,100 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
             _q2_rows(results),
         ),
         "",
+        _tex_tabular(
+            results,
+            "Sweep",
+            "rrrrrrr",
+            r"$k$ & $n$ & mean $|R|$ & min $|R|$ & max $|R|$ & mean $R_w$ & mean $|B \cap R|$",
+            _sweep_summary_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            results,
+            "Sweep seeds",
+            "lrrrrr",
+            r"variant & seed & $k$ & $|R|$ & $R_w$ & $|B \cap R|$",
+            _sweep_seed_rows(results),
+        ),
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_sweep_markdown(results: list[dict[str, Any]]) -> str:
+    sweep = _sweep_results(results)
+    parts = [
+        "# Declaration tightness sweep (Section 7.4)",
+        "",
+        source_caption(sweep, "Sweep"),
+        "",
+        "## k vs |R| vs R_w",
+        "",
+        source_caption(sweep, "Sweep summary"),
+        "",
+        table_sweep(results),
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_sweep_latex(results: list[dict[str, Any]]) -> str:
+    sweep = _sweep_results(results)
+    parts = [
+        "% Declaration tightness sweep (Section 7.4) from make paper-tables TABLE=sweep",
+        f"% {source_caption(sweep, 'Sweep').strip('*')}",
+        "",
+        _tex_tabular(
+            sweep,
+            "Sweep",
+            "rrrrrrr",
+            r"$k$ & $n$ & mean $|R|$ & min $|R|$ & max $|R|$ & mean $R_w$ & mean $|B \cap R|$",
+            _sweep_summary_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            sweep,
+            "Sweep seeds",
+            "lrrrrr",
+            r"variant & seed & $k$ & $|R|$ & $R_w$ & $|B \cap R|$",
+            _sweep_seed_rows(results),
+        ),
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_data_intensive_markdown(results: list[dict[str, Any]]) -> str:
+    rows = _data_intensive_results(results)
+    parts = [
+        "# Data-intensive profile (G4 / Q3 generality)",
+        "",
+        source_caption(rows, "data-intensive"),
+        "",
+        "## Rollback (per class)",
+        "",
+        source_caption(rows, "data-intensive rollback"),
+        "",
+        table_data_intensive_rollback(rows),
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def emit_data_intensive_latex(results: list[dict[str, Any]]) -> str:
+    rows = _data_intensive_results(results)
+    parts = [
+        "% Data-intensive profile (G4 / Q3 generality) from make paper-tables TABLE=data-intensive",
+        f"% {source_caption(rows, 'data-intensive').strip('*')}",
+        "",
+        _tex_tabular(
+            rows,
+            "Data-intensive rollback",
+            "llrrrrrr",
+            r"mode & class & mean $\rho_{\mathrm{enum}}$ & mean $\rho_{\mathrm{rev}}$ & mean $n$ & mean $\rho_{\mathrm{quarantined}}$ & mean $\rho_{\mathrm{escalated}}$ & mean count",
+            _data_intensive_rollback_rows(rows),
+        ),
+        "",
     ]
     return "\n".join(parts)
 
@@ -553,14 +1161,132 @@ def main(argv: list[str] | None = None) -> int:
         default="markdown",
         help="markdown for make analyse; latex for make paper-tables",
     )
+    parser.add_argument(
+        "--table",
+        default="",
+        help="optional table selector (sweep, evasion, data-intensive, gateway, redeclaration, step-split). empty = Paper 1 headline tables",
+    )
     args = parser.parse_args(argv)
     results = load_results(args.results)
+    table = (args.table or "").strip().lower()
+    if table == "sweep":
+        gated = _sweep_results(results)
+        if not gated:
+            print("refusing sweep table: no variant=k{1,3,5,7} results", file=sys.stderr)
+            return 1
+    elif table == "evasion":
+        gated = _evasion_results(results)
+        if not gated:
+            print("refusing evasion table: no result.json with evasion_matrix", file=sys.stderr)
+            return 1
+    elif table in ("data-intensive", "data_intensive"):
+        gated = _data_intensive_results(results)
+        if not gated:
+            print("refusing data-intensive table: no profile=data-intensive results", file=sys.stderr)
+            return 1
+    elif table == "gateway":
+        gated = _gateway_results(results)
+        if not gated:
+            print("refusing gateway table: no gateway-only/gateway-bypass results", file=sys.stderr)
+            return 1
+    elif table in ("redeclaration", "redecl"):
+        gated = _redeclaration_results(results)
+        if not gated:
+            print("refusing redeclaration table: no profile=redeclaration results", file=sys.stderr)
+            return 1
+    elif table in ("step-split", "step_split", "split"):
+        gated = _step_split_results(results)
+        if not gated:
+            print("refusing step-split table: no step_cost_split results", file=sys.stderr)
+            return 1
+    elif table in ("", "all"):
+        gated = [
+            r
+            for r in results
+            if not _is_sweep(r)
+            and not _is_data_intensive(r)
+            and not _is_gateway(r)
+            and not _is_redeclaration(r)
+            and not _is_step_split(r)
+        ]
+    else:
+        print(
+            f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split)",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        assert_cluster_provenance(results)
+        assert_cluster_provenance(gated)
     except ProvenanceError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
+    if table == "sweep":
+        if args.format == "latex":
+            text = emit_sweep_latex(results)
+            out_path = args.out / "sweep.tex"
+        else:
+            text = emit_sweep_markdown(results)
+            out_path = args.out / "sweep.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table == "evasion":
+        if args.format == "latex":
+            text = emit_evasion_latex(results)
+            out_path = args.out / "evasion.tex"
+        else:
+            text = emit_evasion_markdown(results)
+            out_path = args.out / "evasion.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table in ("data-intensive", "data_intensive"):
+        if args.format == "latex":
+            text = emit_data_intensive_latex(results)
+            out_path = args.out / "data-intensive.tex"
+        else:
+            text = emit_data_intensive_markdown(results)
+            out_path = args.out / "data-intensive.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table == "gateway":
+        if args.format == "latex":
+            text = emit_gateway_latex(results)
+            out_path = args.out / "gateway.tex"
+        else:
+            text = emit_gateway_markdown(results)
+            out_path = args.out / "gateway.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table in ("redeclaration", "redecl"):
+        if args.format == "latex":
+            text = emit_redeclaration_latex(results)
+            out_path = args.out / "redeclaration.tex"
+        else:
+            text = emit_redeclaration_markdown(results)
+            out_path = args.out / "redeclaration.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
+    if table in ("step-split", "step_split", "split"):
+        if args.format == "latex":
+            text = emit_step_split_latex(results)
+            out_path = args.out / "step-split.tex"
+        else:
+            text = emit_step_split_markdown(results)
+            out_path = args.out / "step-split.md"
+        out_path.write_text(text)
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
     if args.format == "latex":
         text = emit_latex(results)
         out_path = args.out / "tables.tex"

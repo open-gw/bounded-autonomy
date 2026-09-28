@@ -85,8 +85,27 @@ kubectl_bin apply -f "$ROOT/rig/telemetry/manifests.yaml"
 kubectl_bin apply -f "$ROOT/rig/lineage/marquez.yaml"
 
 docker build -t ba-runtime:paper1 -f "$ROOT/rig/images/Dockerfile" "$ROOT"
-k3d_bin image import ba-runtime:paper1 -c "$CLUSTER_NAME"
+APISIX_IMAGE="$(read_pin gateway.apisix_image)"
+ETCD_IMAGE="$(read_pin gateway.etcd_image)"
+APISIX_CHART="$(read_pin gateway.helm_chart)"
+APISIX_REPO="$(read_pin gateway.helm_repo)"
+docker pull "$APISIX_IMAGE"
+docker pull "$ETCD_IMAGE"
+k3d_bin image import ba-runtime:paper1 "$APISIX_IMAGE" "$ETCD_IMAGE" -c "$CLUSTER_NAME"
 kubectl_bin apply -f "$ROOT/rig/cluster/services.yaml"
 kubectl_bin apply -f "$ROOT/rig/controller/deploy.yaml"
+
+echo "installing Apache APISIX $(read_pin gateway.apisix) (chart ${APISIX_CHART}, plugin $(read_pin gateway.plugin))"
+helm_bin repo add apisix "$APISIX_REPO" --force-update
+helm_bin repo update apisix
+kubectl_bin apply -f "$ROOT/rig/gateway/etcd.yaml"
+kubectl_bin -n apisix rollout status deploy/etcd --timeout=180s
+helm_bin upgrade --install apisix apisix/apisix \
+  --version "$APISIX_CHART" \
+  --namespace apisix \
+  --create-namespace \
+  --values "$ROOT/rig/gateway/apisix-values.yaml"
+kubectl_bin -n apisix rollout status deploy --timeout=300s
+
 touch /tmp/ba-cluster-up
 echo "cluster up. next: make run PROFILE=long-multistep MODE=full SEED=1"

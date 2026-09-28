@@ -18,13 +18,15 @@ VARIANT ?=
 TABLE   ?=
 MANIFEST ?=
 GATEWAY_BYPASS ?=
+PROBE ?=
+STEP_SPLIT ?=
 
 export PYTHONPATH := $(ROOT):$(ROOT)/analysis:$(ROOT)/rig:$(PYTHONPATH)
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*##"; printf "bounded-autonomy  Paper 1 rig\n\n"} \
 	     /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)  GRANULARITY=$(GRANULARITY)  VARIANT=$(VARIANT)  TABLE=$(TABLE)\n"
+	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)  GRANULARITY=$(GRANULARITY)  VARIANT=$(VARIANT)  TABLE=$(TABLE)  PROBE=$(PROBE)  STEP_SPLIT=$(STEP_SPLIT)\n"
 
 tools: ## Install pinned k3d/kubectl/helm/cilium/hubble CLIs into .tools/
 	$(PYTHON) $(ROOT)/scripts/install_tools.py
@@ -54,8 +56,8 @@ up: ## k3d cluster delete+create, Cilium, standalone SPIRE, stores, observers
 down: ## k3d cluster delete (nothing else)
 	$(ROOT)/scripts/cluster_down.sh
 
-run: ## Execute one profile (PROFILE MODE SEED GRANULARITY VARIANT)
-	GRANULARITY=$(GRANULARITY) VARIANT=$(VARIANT) GATEWAY_BYPASS=$(GATEWAY_BYPASS) $(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED) --granularity $(GRANULARITY) $(if $(VARIANT),--variant $(VARIANT),) $(if $(filter 1 true yes,$(GATEWAY_BYPASS)),--gateway-bypass,)
+run: ## Execute one profile (PROFILE MODE SEED GRANULARITY VARIANT PROBE STEP_SPLIT)
+	GRANULARITY=$(GRANULARITY) VARIANT=$(VARIANT) GATEWAY_BYPASS=$(GATEWAY_BYPASS) PROBE=$(PROBE) STEP_SPLIT=$(STEP_SPLIT) $(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED) --granularity $(GRANULARITY) $(if $(VARIANT),--variant $(VARIANT),) $(if $(filter 1 true yes,$(GATEWAY_BYPASS)),--gateway-bypass,) $(if $(filter 0 false no off,$(PROBE)),--no-probe,) $(if $(filter 1 true yes,$(STEP_SPLIT)),--step-split,)
 
 stores-smoke: ## Write and read one object per store; confirm history/versioning
 	$(PYTHON) $(ROOT)/scripts/stores_smoke.py

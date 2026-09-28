@@ -29,7 +29,7 @@ from identity.svid import (
 from observer.evasion import run_evasion, write_evasion
 from observer.tempo import fetch_spans
 from plan import DEFAULT_DECLARED, build_step_plan
-from agent.orchestrator import pick_from_injection, pick_tool
+from agent.orchestrator import UndeclaredTool, pick_from_injection, pick_tool
 from harness.payloads import load_payload
 from profiles import profile_spec
 from sweep import INJECTION_SERVICE, declared_services
@@ -38,6 +38,7 @@ from modes import (
     deploys_gateway_policy,
     run_id_for,
     uses_flat_credential,
+    uses_gateway_path,
     uses_segment,
 )
 from weights import reachable_weight
@@ -152,7 +153,7 @@ def _ensure_agent(task_id: str, mode: str, pod_name: str = "agent") -> str:
             "name": pod_name,
             "namespace": NS,
             "labels": {
-                "app.kubernetes.io/name": "agent",
+                "app.kubernetes.io/name": "ba-sweep" if pod_name != "agent" else "agent",
                 "bounded-autonomy.io/task-id": task_id,
             },
         },
@@ -319,11 +320,16 @@ def _apply_gateway_from_host(spec: dict[str, Any]) -> None:
             proc.kill()
 
 
-def _collect_gateway_logs(since: float) -> list[dict[str, Any]]:
+def _pod_ip(pod: str) -> str:
+    proc = _kubectl("-n", NS, "get", "pod", pod, "-o", "jsonpath={.status.podIP}", check=False)
+    return (proc.stdout or "").strip()
+
+
+def _collect_gateway_logs(since: float, client: str | None = None) -> list[dict[str, Any]]:
     iso = datetime.fromtimestamp(since - 2, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     proc = _kubectl(
         "-n", GATEWAY_NS, "logs", "-l", "app.kubernetes.io/name=apisix",
-        f"--since-time={iso}", check=False,
+        f"--since-time={iso}", "--tail=5000", check=False,
     )
     rows: list[dict[str, Any]] = []
     for line in (proc.stdout or "").splitlines():
@@ -338,6 +344,8 @@ def _collect_gateway_logs(since: float) -> list[dict[str, Any]]:
         request = str(row.get("request") or "")
         host = str(row.get("host") or "")
         if "/apisix/admin/" in request or "/apisix/admin/" in uri or "apisix-admin" in host:
+            continue
+        if client and str(row.get("client") or "") != client:
             continue
         path = request.split()[1] if len(request.split()) > 1 else uri
         service = path.strip("/").split("/", 1)[0] if path else ""
@@ -555,6 +563,7 @@ def _sync_worker_code(pod: str) -> None:
         (ROOT / "rig" / "profiles.py", f"{NS}/{pod}:/app/rig/profiles.py"),
         (ROOT / "rig" / "modes.py", f"{NS}/{pod}:/app/rig/modes.py"),
         (ROOT / "rig" / "harness" / "live_worker.py", f"{NS}/{pod}:/app/rig/harness/live_worker.py"),
+        (ROOT / "rig" / "agent" / "orchestrator.py", f"{NS}/{pod}:/app/rig/agent/orchestrator.py"),
         (
             ROOT / "rig" / "harness" / "payloads" / "v-data.yaml",
             f"{NS}/{pod}:/app/rig/harness/payloads/v-data.yaml",
@@ -617,6 +626,7 @@ def _tempo_from_controller(
     *,
     start: float | None = None,
     end: float | None = None,
+    min_verify: int = 2,
 ) -> pd.DataFrame:
     """Pull spans from Tempo on the host via kubectl port-forward.
 
@@ -648,7 +658,12 @@ def _tempo_from_controller(
             kwargs["start"] = int(start)
         if end is not None:
             kwargs["end"] = int(end)
-        return fetch_spans(task_id=task_id, tempo=f"http://127.0.0.1:{port}", **kwargs)
+        return fetch_spans(
+            task_id=task_id,
+            tempo=f"http://127.0.0.1:{port}",
+            min_verify=min_verify,
+            **kwargs,
+        )
     finally:
         proc.terminate()
         try:
@@ -670,6 +685,38 @@ def _delete_segment(task_id: str) -> float:
     return (time.time() - t0) * 1000.0
 
 
+def _flows_from_outcomes(task_id: str, outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    spiffe = _spiffe(task_id)
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in outcomes:
+        if not item.get("ok"):
+            continue
+        dest = str(item.get("tool") or "")
+        if not dest or dest in seen:
+            continue
+        seen.add(dest)
+        rows.append(
+            {
+                "source_spiffe": spiffe,
+                "destination_service": dest,
+                "verdict": "FORWARDED",
+            }
+        )
+    return rows
+
+
+def _writes_still_committed(out_dir: Path, before_step: int) -> bool:
+    path = out_dir / "groundtruth.parquet"
+    if not path.exists():
+        return False
+    gt = pd.read_parquet(path)
+    if gt.empty or "step" not in gt.columns:
+        return False
+    prior = gt[pd.to_numeric(gt["step"], errors="coerce") < before_step]
+    return not prior.empty
+
+
 def run_cluster(
     *,
     mode: str,
@@ -680,23 +727,31 @@ def run_cluster(
     variant: str | None = None,
     profile: str = "long-multistep",
     gateway_bypass: bool = False,
+    probe_enabled: bool = True,
+    step_split: bool = False,
 ) -> dict[str, Any]:
     spec = profile_spec(profile)
     declared = declared_services(variant) if variant else list(spec["declared"])
-    if granularity == "step":
-        task_id = f"{profile}-{mode}-step-seed{seed}"
-    elif variant:
+    initial_declared = list(declared)
+    if variant:
         task_id = f"{profile}-{variant}-{mode}-seed{seed}"
     else:
         task_id = run_id_for(
-            profile=profile, mode=mode, seed=seed, gateway_bypass=gateway_bypass
+            profile=profile,
+            mode=mode,
+            seed=seed,
+            granularity=granularity,
+            gateway_bypass=gateway_bypass,
+            probe=probe_enabled,
+            step_split=step_split,
         )
     spiffe = _spiffe(task_id)
+    inject = spec.get("injection_enabled", True)
     result = run_local(
         mode=mode,
         seed=seed,
         out_dir=out_dir,
-        injection=True,
+        injection=inject,
         baseline_spans=baseline_spans,
         granularity=granularity,
         task_id=task_id,
@@ -705,8 +760,19 @@ def run_cluster(
         breach_services=[INJECTION_SERVICE if variant else spec["injection_service"]],
         profile=profile,
         gateway_bypass=gateway_bypass,
+        probe_enabled=probe_enabled,
+        step_split=step_split,
     )
-    pod_name = "agent-sweep" if variant else "agent"
+    if profile == "redeclaration" or step_split:
+        pod_name = "agent-t28"
+    elif variant:
+        pod_name = "agent-sweep"
+    elif mode in ("gateway-only", "gateway-bypass") or gateway_bypass:
+        pod_name = "agent-t24"
+    elif profile == "data-intensive":
+        pod_name = "agent-di"
+    else:
+        pod_name = "agent"
     pod = _ensure_agent(task_id, mode, pod_name=pod_name)
     _sync_worker_code(pod)
     step_d: list[float] = []
@@ -720,7 +786,10 @@ def run_cluster(
         list(declared),
         granularity,
         gateway_bypass=gateway_bypass,
-        isolate=bool(variant),
+        isolate=bool(variant)
+        or profile in ("redeclaration", "data-intensive")
+        or step_split
+        or gateway_bypass,
     )
     if mode == "full":
         # DNS-proxy matchName attaches after CNP Valid; 2 s avoids a first-lookup blackhole.
@@ -731,24 +800,109 @@ def run_cluster(
         if granularity == "step"
         else DEFAULT_TASK_JWT_TTL_SECONDS
     )
-    if granularity == "step" and mode == "full":
-        plan = build_step_plan(seed, declared=declared)
-        payload = load_payload("v1", seed)
+    step_boundaries: list[dict[str, Any]] = []
+    live_outcomes: list[dict[str, Any]] = []
+    redeclaration_cost_ms: float | None = result.get("redeclaration_cost_ms")
+    steps_reexecuted = int(result.get("steps_reexecuted") or 0)
+    writes_committed = result.get("writes_committed_before_termination")
+    if profile == "redeclaration" and mode == "full":
+        redeclare_at = int(spec.get("redeclare_at") or 15)
+        added = spec.get("redeclare_tool") or "docs"
+        task_jwt = _mint_jwt_svid(spiffe, jwt_ttl)
+        pre = _exec_worker(
+            [
+                "--mode", mode, "--seed", str(seed),
+                "--task-id", task_id, "--spiffe-id", spiffe,
+                "--until-step", str(redeclare_at - 1),
+                "--declared", declared_arg,
+                "--profile", profile,
+            ],
+            pod=pod,
+        )
+        live_outcomes.extend(pre.get("outcomes") or [])
+        termination = time.time()
+        expanded = list(declared)
+        if added not in expanded:
+            expanded.append(added)
+        declared = expanded
+        declared_arg = ",".join(declared)
+        _apply_declaration(task_id, list(declared), granularity)
+        _wait_cnp(task_id)
+        task_jwt = _mint_jwt_svid(spiffe, jwt_ttl)
+        post = _exec_worker(
+            [
+                "--mode", mode, "--seed", str(seed),
+                "--task-id", task_id, "--spiffe-id", spiffe,
+                "--from-step", str(redeclare_at),
+                "--declared", declared_arg,
+                "--profile", profile,
+            ],
+            pod=pod,
+        )
+        first_call = float(post.get("first_call_epoch") or time.time())
+        redeclaration_cost_ms = max((first_call - termination) * 1000.0, 0.0)
+        steps_reexecuted = 0
+        writes_committed = _writes_still_committed(out_dir, redeclare_at)
+        live_outcomes.extend(post.get("outcomes") or [])
+        worker = {
+            "start_epoch": float(pre.get("start_epoch") or task_start),
+            "end_epoch": float(post.get("end_epoch") or time.time()),
+        }
+    elif granularity == "step" and mode == "full":
+        plan = build_step_plan(
+            seed,
+            declared=declared,
+            redeclare_at=spec.get("redeclare_at"),
+            redeclare_tool=spec.get("redeclare_tool") or "docs",
+        )
+        payload = load_payload(spec.get("payload_version") or "v1", seed)
         last = None
         for step in plan:
-            tool = pick_tool(step.instruction, list(declared), last)
-            if step.index == 15:
+            try:
+                tool = pick_tool(step.instruction, list(declared), last)
+            except UndeclaredTool as exc:
+                tool = exc.tool
+            if inject and step.index == int(spec.get("injection_at") or 15):
                 tool = pick_from_injection(payload, list(declared))
-            d_ms = 0.0
+            b0 = time.perf_counter()
+            s0 = time.perf_counter()
             jwt = _mint_jwt_svid(spiffe, jwt_ttl)
+            svid_ms = (time.perf_counter() - s0) * 1000.0
             if task_jwt is None:
                 task_jwt = jwt
+            p0 = time.perf_counter()
+            d_ms = 0.0
             if tool in declared:
                 _apply_declaration(task_id, [tool], "step")
                 d_ms = _wait_cnp(task_id)
+            prop_ms = (time.perf_counter() - p0) * 1000.0
+            probe_ms = 0.0
+            if step_split and probe_enabled:
+                pr0 = time.perf_counter()
+                rows, flows = cluster_probe(
+                    mode, seed, pod, task_id, timeout=0.3, attempts=1
+                )
+                for row in rows:
+                    row["step"] = step.index
+                live_outcomes.append({"ok": True, "tool": tool, "probe_rows": rows})
+                del flows
+                probe_ms = (time.perf_counter() - pr0) * 1000.0
+            boundary_ms = (time.perf_counter() - b0) * 1000.0
+            other_ms = boundary_ms - svid_ms - prop_ms - probe_ms
+            if step_split:
+                step_boundaries.append(
+                    {
+                        "step": step.index,
+                        "propagation_ms": prop_ms,
+                        "svid_reissue_ms": svid_ms,
+                        "probe_ms": probe_ms,
+                        "other_ms": other_ms,
+                        "boundary_ms": boundary_ms,
+                    }
+                )
             step_start = time.time()
             step_d.append(d_ms)
-            _exec_worker(
+            step_worker = _exec_worker(
                 [
                     "--mode", mode, "--seed", str(seed),
                     "--task-id", task_id, "--spiffe-id", spiffe,
@@ -758,6 +912,7 @@ def run_cluster(
                 ],
                 pod=pod,
             )
+            live_outcomes.extend(step_worker.get("outcomes") or [])
             step_end = time.time()
             tau_step = max(float(jwt["tau_seconds"]), 1e-6)
             t_step = max(step_end - step_start, 1e-6)
@@ -791,13 +946,35 @@ def run_cluster(
             ] + (["--gateway-bypass"] if gateway_bypass else []),
             pod=pod,
         )
+        live_outcomes.extend(worker.get("outcomes") or [])
     task_end = time.time()
+    if uses_gateway_path(mode, gateway_bypass):
+        _kubectl(
+            "-n", NS, "exec", pod, "--",
+            "python", "-c",
+            (
+                "import urllib.request,urllib.error\n"
+                "req=urllib.request.Request("
+                "'http://apisix-gateway.apisix.svc.cluster.local:9080/docs/tools/call',"
+                "data=b'{}',method='POST',"
+                "headers={'Content-Type':'application/json'})\n"
+                "try:\n urllib.request.urlopen(req,timeout=2)\n"
+                "except Exception:\n pass\n"
+            ),
+            check=False,
+        )
     if deploys_gateway_policy(mode, gateway_bypass):
-        time.sleep(2)
-    gw_rows = _collect_gateway_logs(task_start) if deploys_gateway_policy(mode, gateway_bypass) else []
+        time.sleep(5)
+    gw_rows = (
+        _collect_gateway_logs(task_start, client=_pod_ip(pod) or None)
+        if deploys_gateway_policy(mode, gateway_bypass)
+        else []
+    )
     if gw_rows or deploys_gateway_policy(mode, gateway_bypass):
         pd.DataFrame(gw_rows).to_parquet(out_dir / "gateway.parquet", index=False)
-    if variant:
+    if not probe_enabled:
+        probe_rows, flow_rows = [], _flows_from_outcomes(task_id, live_outcomes)
+    elif variant:
         probe_rows, flow_rows = [], []
         for _ in range(4):
             _kubectl(
@@ -821,12 +998,13 @@ def run_cluster(
                 break
     else:
         probe_rows, flow_rows = cluster_probe(mode, seed, pod, task_id)
-    if mode == "full" and granularity == "step":
+    if mode == "full" and granularity == "step" and probe_enabled:
         _apply_declaration(task_id, list(declared), "task")
         _wait_cnp(task_id)
         probe_rows, flow_rows = cluster_probe(mode, seed, pod, task_id)
-    evasion_rows = run_evasion(_kubectl, pod, NS, mode)
-    write_evasion(out_dir / "evasion.parquet", evasion_rows)
+    if mode in ("flat", "full") and not gateway_bypass and not step_split and profile != "redeclaration":
+        evasion_rows = run_evasion(_kubectl, pod, NS, mode)
+        write_evasion(out_dir / "evasion.parquet", evasion_rows)
     policy_removed_at: float | None = None
     entry_deleted_at: float | None = None
     if uses_segment(mode, gateway_bypass):
@@ -868,17 +1046,70 @@ def run_cluster(
         )
     pd.DataFrame(svid_rows).to_parquet(out_dir / "svid.parquet", index=False)
 
+    expected_verify = int(result.get("steps_completed") or spec.get("steps") or 0)
+    # fetch_spans returns at >=2 verify rows; a 20-step profile under
+    # concurrent Tempo/CNP load can land a partial set. Wait for the
+    # provenance window [steps-1, steps] on data-intensive.
+    min_verify = 2
+    if profile == "data-intensive" and expected_verify:
+        min_verify = max(2, expected_verify - 1)
+    window_start = task_start - 5
+    deadline = time.time() + (120 if profile == "data-intensive" else 0)
     time.sleep(3)
-    spans = _tempo_from_controller(
-        task_id,
-        start=task_start - 5,
-        end=time.time() + 30,
-    )
-    n_verify = (
-        int((spans["name"] == "verify").sum())
-        if not spans.empty and "name" in spans.columns
-        else 0
-    )
+    spans = pd.DataFrame()
+    n_verify = 0
+    while True:
+        spans = _tempo_from_controller(
+            task_id,
+            start=window_start,
+            end=time.time() + 30,
+            min_verify=min_verify,
+        )
+        n_verify = (
+            int((spans["name"] == "verify").sum())
+            if not spans.empty and "name" in spans.columns
+            else 0
+        )
+        if n_verify >= min_verify or time.time() >= deadline:
+            break
+        time.sleep(4)
+    if profile == "data-intensive" and n_verify < min_verify:
+        # Concurrent isolate=false runs delete all CNPs; replay worker
+        # in a fresh window so leftover traces cannot inflate the cap.
+        _apply_declaration(
+            task_id,
+            list(declared),
+            granularity,
+            segment_enabled=uses_segment(mode, gateway_bypass),
+        )
+        time.sleep(2)
+        window_start = time.time() - 2
+        _exec_worker(
+            [
+                "--mode", mode, "--seed", str(seed),
+                "--task-id", task_id, "--spiffe-id", spiffe,
+                "--declared", declared_arg,
+                "--profile", profile,
+            ] + (["--gateway-bypass"] if gateway_bypass else []),
+            pod=pod,
+        )
+        time.sleep(5)
+        replay_deadline = time.time() + 90
+        while True:
+            spans = _tempo_from_controller(
+                task_id,
+                start=window_start,
+                end=time.time() + 30,
+                min_verify=min_verify,
+            )
+            n_verify = (
+                int((spans["name"] == "verify").sum())
+                if not spans.empty and "name" in spans.columns
+                else 0
+            )
+            if n_verify >= min_verify or time.time() >= replay_deadline:
+                break
+            time.sleep(4)
     if n_verify < 2:
         raise RuntimeError(f"Tempo returned {n_verify} verify spans for {task_id}")
     run_rows = [
@@ -900,6 +1131,14 @@ def run_cluster(
 
     meta = json.loads((out_dir / "result.json").read_text())
     reached = sorted({r["service"] for r in probe_rows if r["success"]})
+    if not reached:
+        reached = sorted(
+            {
+                str(r.get("destination_service"))
+                for r in flow_rows
+                if str(r.get("verdict") or "").upper() == "FORWARDED" and r.get("destination_service")
+            }
+        )
     result = _compute(
         out_dir,
         {
@@ -936,6 +1175,12 @@ def run_cluster(
             "entry_deleted_at_epoch": entry_deleted_at,
             "policy_removed_at_epoch": policy_removed_at,
             "task_end_epoch": task_end,
+            "redeclaration_cost_ms": redeclaration_cost_ms,
+            "steps_reexecuted": steps_reexecuted,
+            "writes_committed_before_termination": writes_committed,
+            "probe_enabled": probe_enabled,
+            "step_boundaries": step_boundaries,
+            "step_split": step_split,
         },
         baseline_spans=baseline_spans,
     )

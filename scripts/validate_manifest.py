@@ -138,6 +138,24 @@ def extra_errors(doc: dict, inventory: set[str]) -> list[str]:
                     f"got {undeclared}"
                 )
 
+    if profile == "redeclaration":
+        if steps != 30:
+            errors.append(f"redeclaration requires spec.steps=30; got {steps}")
+        if injection.get("enabled") is not False:
+            errors.append("redeclaration requires injection.enabled=false (legitimate undeclared, not drift)")
+        if injection.get("at_step") != 15:
+            errors.append(
+                f"redeclaration step-plan undeclared tool is at step 15; injection.at_step={injection.get('at_step')}"
+            )
+        if list(declared) != ["records", "search", "notify"]:
+            errors.append(
+                f"redeclaration initial declared must be [records, search, notify]; got {declared}"
+            )
+
+    observer = spec.get("observer") or {}
+    if "probe" in observer and not isinstance(observer.get("probe"), bool):
+        errors.append("spec.observer.probe must be a boolean")
+
     if spec.get("gateway_bypass") and spec.get("mode") not in ("full", "gateway-bypass"):
         errors.append(
             "spec.gateway_bypass is only combinable with mode=full "
@@ -150,6 +168,7 @@ def extra_errors_result(doc: dict) -> list[str]:
     errors: list[str] = []
     matrix = doc.get("evasion_matrix")
     if matrix is None:
+        errors.extend(_extra_errors_result_q4(doc))
         return errors
     if not isinstance(matrix, list):
         return ["evasion_matrix must be an array"]
@@ -178,6 +197,37 @@ def extra_errors_result(doc: dict) -> list[str]:
     artefacts = doc.get("artefacts") or {}
     if artefacts.get("evasion") != "evasion.parquet":
         errors.append("artefacts.evasion must be 'evasion.parquet' when evasion_matrix is set")
+    errors.extend(_extra_errors_result_q4(doc))
+    return errors
+
+
+def _extra_errors_result_q4(doc: dict) -> list[str]:
+    errors: list[str] = []
+    split = doc.get("step_cost_split")
+    if isinstance(split, dict):
+        err = split.get("reconcile_error_pct")
+        if isinstance(err, (int, float)) and float(err) > 5.0:
+            errors.append(
+                f"step_cost_split.reconcile_error_pct {err} exceeds 5% acceptance"
+            )
+        totals = split.get("totals") or {}
+        try:
+            accounted = (
+                float(totals.get("propagation_ms") or 0)
+                + float(totals.get("svid_reissue_ms") or 0)
+                + float(totals.get("probe_ms") or 0)
+                + float(totals.get("other_ms") or 0)
+            )
+            observed = float(totals.get("boundary_ms") or 0)
+            if observed > 0 and abs(accounted - observed) / observed * 100.0 > 5.0:
+                errors.append(
+                    "step_cost_split totals do not reconcile with boundary_ms within 5%"
+                )
+        except (TypeError, ValueError):
+            errors.append("step_cost_split.totals are not numeric")
+    if doc.get("profile") == "redeclaration":
+        if doc.get("redeclaration_cost_ms") is None:
+            errors.append("redeclaration result requires redeclaration_cost_ms")
     return errors
 
 

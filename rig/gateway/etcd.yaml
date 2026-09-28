@@ -1,0 +1,68 @@
+# Pinned etcd for APISIX. Official image; one replica for the single-node rig.
+# Pin: quay.io/coreos/etcd:v3.5.21 (same minor as the APISIX chart's etcd).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apisix
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd
+  namespace: apisix
+  labels:
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  selector:
+    app.kubernetes.io/name: etcd
+  ports:
+    - name: client
+      port: 2379
+      targetPort: 2379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etcd
+  namespace: apisix
+  labels:
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/part-of: bounded-autonomy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: etcd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: etcd
+        app.kubernetes.io/part-of: bounded-autonomy
+    spec:
+      containers:
+        - name: etcd
+          image: quay.io/coreos/etcd:v3.5.21
+          imagePullPolicy: IfNotPresent
+          command:
+            - etcd
+            - --name=ba-etcd
+            - --data-dir=/var/lib/etcd
+            - --listen-client-urls=http://0.0.0.0:2379
+            - --advertise-client-urls=http://etcd.apisix.svc.cluster.local:2379
+            - --listen-peer-urls=http://0.0.0.0:2380
+            - --initial-advertise-peer-urls=http://etcd.apisix.svc.cluster.local:2380
+            - --initial-cluster=ba-etcd=http://etcd.apisix.svc.cluster.local:2380
+            - --initial-cluster-state=new
+            - --initial-cluster-token=ba-apisix
+          ports:
+            - name: client
+              containerPort: 2379
+            - name: peer
+              containerPort: 2380
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/etcd
+      volumes:
+        - name: data
+          emptyDir: {}
