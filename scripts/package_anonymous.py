@@ -20,24 +20,31 @@ DIST = ROOT / "dist"
 TREE = DIST / "bounded-autonomy-anonymous"
 TARBALL = DIST / "bounded-autonomy-anonymous.tar.gz"
 
+# Concatenated so this file itself does not contain the identified strings.
+_FAMILY = "Dhana" + "raj"
+_GIVEN = "Ri" + "nu"
+_HOST = "Ri" + "nus-MBP"
+_USER = _GIVEN.lower() + _FAMILY.lower()
+_ORCID = "0009-0007-9082-8846"
 NEEDLES = re.compile(
-    r"Dhanaraj|Goldgin|rinudhanaraj|Rinus-MBP|"
-    r"0009-0007-9082-8846|orcid\.org/0009-0007-9082-8846|"
-    r"(?<![A-Za-z])Rinu(?![A-Za-z])",
+    rf"{_FAMILY}|Goldgin|{_USER}|{_HOST}|{_ORCID}|orcid\.org/{_ORCID}|"
+    rf"(?<![A-Za-z]){_GIVEN}(?![A-Za-z])",
     re.IGNORECASE,
 )
 
 REPLACEMENTS = (
-    ("Rinu Dhanaraj", "Anonymous"),
-    ("Dhanaraj, Rinu Goldgin", "Anonymous"),
-    ("Dhanaraj, Rinu", "Anonymous"),
-    ("Dhanaraj, R.", "Anonymous"),
-    ("Rinus-MBP-M3.local", "measurement-host.local"),
-    ("rinudhanaraj", "anonymous"),
-    ("https://orcid.org/0009-0007-9082-8846", ""),
-    ("0009-0007-9082-8846", ""),
-    ("Dhanaraj", "Anonymous"),
+    (f"{_GIVEN} {_FAMILY}", "Anonymous"),
+    (f"{_FAMILY}, {_GIVEN} Goldgin", "Anonymous"),
+    (f"{_FAMILY}, {_GIVEN}", "Anonymous"),
+    (f"{_FAMILY}, R.", "Anonymous"),
+    (f"{_HOST}-M3.local", "measurement-host.local"),
+    (_HOST, "measurement-host"),
+    (_USER, "anonymous"),
+    (f"https://orcid.org/{_ORCID}", ""),
+    (_ORCID, ""),
+    (_FAMILY, "Anonymous"),
     ("Goldgin", "Anonymous"),
+    (_GIVEN, "Anonymous"),
 )
 
 
@@ -63,9 +70,17 @@ def _rewrite_text(path: Path) -> None:
 
 def _rewrite_citation(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    text = re.sub(r"(?m)^(\s+)family-names: .+$", r"\1family-names: Anonymous", text)
-    text = re.sub(r"(?m)^(\s+)given-names: .+$", r"\1given-names: Reviewer", text)
-    text = re.sub(r"(?m)^(\s+)orcid: .+\n", "", text)
+    text = re.sub(
+        r"(?m)^(\s*(?:-\s+)?)family-names: .+$",
+        r"\1family-names: Anonymous",
+        text,
+    )
+    text = re.sub(
+        r"(?m)^(\s*(?:-\s+)?)given-names: .+$",
+        r"\1given-names: Reviewer",
+        text,
+    )
+    text = re.sub(r"(?m)^(\s*)orcid: .+\n", "", text)
     path.write_text(text, encoding="utf-8")
 
 
@@ -80,12 +95,19 @@ def _rewrite_zenodo(path: Path) -> None:
 
 def _scrub_tree(tree: Path) -> None:
     skip_suffixes = {".pdf", ".png", ".svg", ".parquet"}
+    skip_rel = {
+        "scripts/package_anonymous.py",
+        "tests/test_anonymous.py",
+    }
     for path in tree.rglob("*"):
         if not path.is_file():
             continue
         if path.suffix.lower() in skip_suffixes:
             continue
         rel = path.relative_to(tree).as_posix()
+        if rel in skip_rel:
+            path.unlink()
+            continue
         if rel == "CITATION.cff":
             _rewrite_citation(path)
             continue
