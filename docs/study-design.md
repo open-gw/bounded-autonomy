@@ -129,6 +129,14 @@ Trust domain `rig`. One SPIFFE ID per task: `spiffe://rig/task/<task-id>`. Task 
 
 Declarations are `task` granularity by default (one CNP for the whole run). `step` granularity is supported: a narrowed `TaskDeclaration` update replaces the CNP. Paper 1 runs use `task`.
 
+### 3.5 Re-declaration (Task 28 / M4 Q4)
+
+Amendment, not a silent metric change. Profile `redeclaration` uses the Paper 1 mix and initial allow-list. The step plan names an undeclared tool at step 15 **legitimately** (injection is off). The orchestrator terminates, re-declares with that tool added, re-provisions the CNP, remints the JWT-SVID, and resumes. `redeclaration_cost_ms` is the wall from termination to the first call of the resumed task. Steps 1–14 are not replayed (`steps_reexecuted = 0`). Writes committed before termination stay committed.
+
+### 3.6 Probe-off step split (Task 28 / G8)
+
+`spec.observer.probe: false` skips the TCP probe. `reachable_set` then uses `FORWARDED` flows only. Step-granularity runs may record `step_cost_split` (propagation, SVID reissue, probe, other). Named clocks plus `other` must reconcile with observed step-boundary duration within 5%. Paper 1 tables ignore these rows.
+
 ---
 
 ## 4. Metric definitions
@@ -140,7 +148,7 @@ All four functions are pure. Inputs are Parquet or JSON. They do not query the c
 - `probe`: columns `step` (int), `service` (str), `success` (bool). One row per (step, service) from the probe job, which attempts TCP connect to every inventory service from the task identity.
 - `flows`: columns `source_spiffe` (str), `destination_service` (str), `verdict` (str). Hubble export, filtered to the task identity, `FORWARDED` only.
 
-A service is reachable if there exists a probe row with `success=true` **or** a flow row with `verdict=FORWARDED` to that service. Return the set of such names. Cardinality is `|S|` in the manuscript.
+A service is reachable if there exists a probe row with `success=true` **or** a flow row with `verdict=FORWARDED` to that service. Return the set of such names. Cardinality is `|S|` in the manuscript. When `observer.probe` is false the probe input is empty and the set is flows-only.
 
 On a clean `full` run with the Paper 1 declaration, `|S| = 3`. On `flat`, `|S| = 8`.
 

@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "redeclaration-full-seed1",
+  "profile": "redeclaration",
+  "mode": "full",
+  "seed": 1,
+  "started_at": "2026-09-28T05:14:20.082385Z",
+  "finished_at": "2026-09-28T05:14:28.077954Z",
+  "wall_clock_seconds": 7.9955689907073975,
+  "source": "cluster",
+  "declaration": {
+    "task_id": "redeclaration-full-seed1",
+    "spiffe_id": "spiffe://rig/task/redeclaration-full-seed1",
+    "services": [
+      "records",
+      "search",
+      "notify",
+      "docs"
+    ],
+    "expected_duration_seconds": 1800,
+    "granularity": "task"
+  },
+  "steps_completed": 30,
+  "write_counts": {
+    "idempotent": 12,
+    "versioned": 9,
+    "derived": 6,
+    "irreversible": 3
+  },
+  "metrics": {
+    "reachable_set_size": 5,
+    "reachable_services": [
+      "catalog",
+      "docs",
+      "notify",
+      "records",
+      "search"
+    ],
+    "reachable_weight": 11,
+    "credential_ratio": 225.42561856546934,
+    "credential_ratio_derivation": {
+      "formula": "credential_ratio = tau_seconds / T_seconds",
+      "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+      "tau_seconds": 1800.0,
+      "T_seconds": 7.984895467758179,
+      "credential_kind": "jwt-svid"
+    },
+    "tau_seconds": 1800.0,
+    "T_seconds": 7.984895467758179,
+    "tau_issued_epoch": 1790572467.0,
+    "tau_not_after_epoch": 1790574267.0,
+    "T_start_epoch": 1790572460.0823858,
+    "T_end_epoch": 1790572468.0672812,
+    "residual_svid_seconds": 1798.805897951126,
+    "residual_policy_seconds": 1.0922250747680664,
+    "entry_deleted_at_epoch": 1790572536.970995,
+    "policy_removed_at_epoch": 1790572469.2863271,
+    "task_end_epoch": 1790572468.194102,
+    "credential_kind": "jwt-svid",
+    "rollback_completeness": {
+      "idempotent": {
+        "rho_rev": 1.0,
+        "n": 12,
+        "restored": 12,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
+      },
+      "versioned": {
+        "rho_rev": 1.0,
+        "n": 9,
+        "restored": 9,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
+      },
+      "derived": {
+        "rho_rev": null,
+        "n": 6,
+        "quarantined": 6,
+        "rho_enum": 1.0,
+        "rho_quarantined": 1.0,
+        "rho_escalated": 0.0
+      },
+      "irreversible": {
+        "rho_rev": 0.0,
+        "n": 3,
+        "escalated": 3,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 1.0
+      }
+    },
+    "rho_enum": 1.0,
+    "verification_overhead": {
+      "absolute_seconds": 0.0034762930000000005,
+      "relative": null,
+      "verify_ms": 3.4762930000000005,
+      "total_ms": 781.810127
+    },
+    "segment_p_ms": 93.03808212280273,
+    "segment_q_ms": 1092.2250747680664,
+    "step_ratio_mean": null,
+    "step_ratio_max": null,
+    "d_ms_mean": 93.03808212280273,
+    "d_ms_max": 93.03808212280273,
+    "breach_services": [
+      "docs"
+    ],
+    "breach_intersection": [
+      "docs"
+    ],
+    "breach_intersection_size": 1
+  },
+  "policy_propagation_ms": [
+    93.03808212280273
+  ],
+  "artefacts": {
+    "probe": "probe.parquet",
+    "flows": "flows.parquet",
+    "spans": "spans.parquet",
+    "lineage": "lineage.parquet",
+    "groundtruth": "groundtruth.parquet",
+    "svid": "svid.parquet",
+    "gateway": "gateway.parquet"
+  },
+  "redeclaration_cost_ms": 7070.3229904174805,
+  "steps_reexecuted": 0,
+  "writes_committed_before_termination": true
+}

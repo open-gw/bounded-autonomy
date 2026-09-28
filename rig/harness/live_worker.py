@@ -89,7 +89,7 @@ def run_steps(
         seed,
         steps=spec["steps"],
         write_mix=spec["write_mix"],
-        declared=list(spec["declared"]),
+        declared=declared,
         three_store=spec["three_store"],
         redeclare_at=spec.get("redeclare_at"),
         redeclare_tool=spec.get("redeclare_tool") or "docs",
@@ -145,8 +145,7 @@ def run_steps(
             last_result = out if out.get("ok") else {"denied": True, "tool": tool}
             outcomes.append({"step": step.index, "tool": tool, "ok": bool(out.get("ok"))})
     finally:
-        if span is not None:
-            span.end(end_time=time.time_ns())
+        if span_cm is not None:
             span_cm.__exit__(None, None, None)
     force_flush()
     end = time.time()

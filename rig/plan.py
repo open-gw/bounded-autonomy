@@ -103,6 +103,8 @@ def build_step_plan(
     write_mix: Mapping[str, float] | None = None,
     declared: Sequence[str] | None = None,
     three_store: bool = False,
+    redeclare_at: int | None = None,
+    redeclare_tool: str = "docs",
 ) -> list[Step]:
     mix = write_mix or {
         "idempotent": 0.4,
@@ -127,6 +129,10 @@ def build_step_plan(
                 tool, operation = tool_for_class(cls, allow)
         else:
             tool, operation = tool_for_class(cls, allow)
+        if redeclare_at is not None and i == int(redeclare_at):
+            tool = redeclare_tool
+            ops = CLASS_OPS.get(tool) or {}
+            operation = ops.get(cls, operation)
         instruction = (
             f"Step {i}: using the {tool} tool, perform {operation} "
             f"({cls} write) on the declared store."

@@ -11,6 +11,7 @@ from metrics import (
     credential_ratio,
     reachable_set,
     rollback_completeness,
+    step_cost_split,
     verification_overhead,
     verify_duration_variance,
 )
@@ -176,6 +177,53 @@ def test_verification_overhead_relative_to_baseline():
     assert got["verify_ms"] == 40
     assert got["absolute_seconds"] == pytest.approx(0.03)
     assert got["relative"] == pytest.approx(0.4)  # (140-100)/100
+
+
+def test_reachable_set_flows_only_when_probe_empty():
+    flows = pd.DataFrame(
+        [
+            {
+                "source_spiffe": "spiffe://rig/task/t1",
+                "destination_service": "records",
+                "verdict": "FORWARDED",
+            },
+            {
+                "source_spiffe": "spiffe://rig/task/t1",
+                "destination_service": "search",
+                "verdict": "FORWARDED",
+            },
+        ]
+    )
+    assert reachable_set(flows, pd.DataFrame()) == {"records", "search"}
+    assert reachable_set(flows, []) == {"records", "search"}
+
+
+def test_step_cost_split_reconciles_within_five_percent():
+    boundaries = [
+        {
+            "step": 1,
+            "propagation_ms": 10.0,
+            "svid_reissue_ms": 8.0,
+            "probe_ms": 20.0,
+            "other_ms": 2.0,
+            "boundary_ms": 40.0,
+        },
+        {
+            "step": 2,
+            "propagation_ms": 12.0,
+            "svid_reissue_ms": 7.0,
+            "probe_ms": 0.0,
+            "other_ms": 1.0,
+            "boundary_ms": 20.0,
+        },
+    ]
+    got = step_cost_split(boundaries, probe_enabled=False)
+    assert got["reconcile_ok"] is True
+    assert got["reconcile_error_pct"] <= 5.0
+    assert got["totals"]["boundary_ms"] == 60.0
+    assert got["totals"]["propagation_ms"] + got["totals"]["svid_reissue_ms"] + got[
+        "totals"
+    ]["probe_ms"] + got["totals"]["other_ms"] == pytest.approx(60.0)
 
 
 def test_verify_duration_variance_detects_constants():
