@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bounded-autonomy.io/schemas/dispersion.schema.json",
+  "title": "MedianIQR",
+  "description": "Task 26 / M6 aggregate: median, Tukey IQR, bootstrap 95% CI for the median (1000 resamples).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "n",
+    "median",
+    "q1",
+    "q3",
+    "iqr",
+    "ci95_low",
+    "ci95_high",
+    "resamples",
+    "bootstrap_seed"
+  ],
+  "properties": {
+    "n": { "type": "integer", "minimum": 0 },
+    "median": { "type": ["number", "null"] },
+    "q1": { "type": ["number", "null"] },
+    "q3": { "type": ["number", "null"] },
+    "iqr": { "type": ["number", "null"] },
+    "ci95_low": { "type": ["number", "null"] },
+    "ci95_high": { "type": ["number", "null"] },
+    "resamples": { "const": 1000 },
+    "bootstrap_seed": { "type": "integer" }
+  }
+}

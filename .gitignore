@@ -45,3 +45,6 @@ analysis/output/
 kubeconfig.yaml
 .kube/
 *.kubeconfig
+
+# Local worktrees
+.worktrees/

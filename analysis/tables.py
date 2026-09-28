@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import random
 import statistics
 import sys
 from collections import defaultdict
@@ -237,6 +239,38 @@ def table_gateway(results: list[dict[str, Any]]) -> str:
     )
 
 
+def _gateway_dispersion_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in _gateway_results(results):
+        grouped[_gateway_cell(row)].append(row)
+    rows: list[tuple[str, ...]] = []
+    for cell in sorted(grouped):
+        cell_rows = grouped[cell]
+        sizes = median_iqr_ci(
+            _metric_values(cell_rows, lambda r: (r.get("metrics") or {}).get("reachable_set_size"))
+        )
+        inter = median_iqr_ci(_metric_values(cell_rows, _b_intersect_r))
+        rows.append(
+            (
+                cell,
+                str(len(cell_rows)),
+                _fmt_median_iqr(sizes, 3),
+                _fmt_ci(sizes, 3),
+                _fmt_median_iqr(inter, 3),
+                _fmt_ci(inter, 3),
+            )
+        )
+    return rows
+
+
+def table_gateway_dispersion(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | n | median \\|S\\| [IQR] | 95% CI | median \\|B ∩ R\\| [IQR] | 95% CI |",
+        "| --- | ---: | --- | --- | --- | --- |",
+        _gateway_dispersion_rows(results),
+    )
+
+
 def emit_gateway_markdown(results: list[dict[str, Any]]) -> str:
     gated = _gateway_results(results)
     parts = [
@@ -245,6 +279,12 @@ def emit_gateway_markdown(results: list[dict[str, Any]]) -> str:
         source_caption(gated, "Gateway"),
         "",
         table_gateway(results),
+        "",
+        "## Dispersion (M6)",
+        "",
+        source_caption(gated, "Gateway dispersion"),
+        "",
+        table_gateway_dispersion(results),
         "",
         "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong.",
         "",
@@ -261,6 +301,14 @@ def emit_gateway_latex(results: list[dict[str, Any]]) -> str:
             "lrrrl",
             r"mode & seed & $|S|$ & $|B \cap R|$ & source",
             _gateway_rows(results),
+        )
+        + "\n\n"
+        + _tex_tabular(
+            gated,
+            "Gateway dispersion",
+            "lrlrlr",
+            r"mode & $n$ & median $|S|$ [IQR] & 95\% CI & median $|B \cap R|$ [IQR] & 95\% CI",
+            _gateway_dispersion_rows(results),
         )
         + "\n"
     )
@@ -720,12 +768,173 @@ def table_step(results: list[dict[str, Any]]) -> str:
     )
 
 
+def _dispersion_series(results: list[dict[str, Any]]) -> list[tuple[str, str, list[float], int]]:
+    """(mode, metric, values, digits) for headline task-granularity cells."""
+    series: list[tuple[str, str, list[float], int]] = []
+    for mode, mode_rows in sorted(_by_mode(_task_results(results)).items()):
+        series.append(
+            (
+                mode,
+                "|S|",
+                _metric_values(mode_rows, lambda r: (r.get("metrics") or {}).get("reachable_set_size")),
+                3,
+            )
+        )
+        series.append(
+            (
+                mode,
+                "R_w",
+                _metric_values(mode_rows, lambda r: (r.get("metrics") or {}).get("reachable_weight")),
+                3,
+            )
+        )
+        series.append(
+            (
+                mode,
+                "verify_ms",
+                _metric_values(
+                    mode_rows,
+                    lambda r: ((r.get("metrics") or {}).get("verification_overhead") or {}).get("verify_ms"),
+                ),
+                1,
+            )
+        )
+        series.append(
+            (
+                mode,
+                "τ (s)",
+                _metric_values(mode_rows, lambda r: (r.get("metrics") or {}).get("tau_seconds")),
+                3,
+            )
+        )
+        series.append(
+            (
+                mode,
+                "T (s)",
+                _metric_values(mode_rows, lambda r: (r.get("metrics") or {}).get("T_seconds")),
+                3,
+            )
+        )
+        series.append(
+            (
+                mode,
+                "τ/T",
+                _metric_values(mode_rows, lambda r: (r.get("metrics") or {}).get("credential_ratio")),
+                3,
+            )
+        )
+    return series
+
+
+def _dispersion_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    rows: list[tuple[str, ...]] = []
+    for mode, metric, values, digits in _dispersion_series(results):
+        stat = median_iqr_ci(values)
+        rows.append(
+            (
+                mode,
+                metric,
+                str(stat["n"]),
+                _fmt_median_iqr(stat, digits),
+                _fmt_ci(stat, digits),
+            )
+        )
+    return rows
+
+
+def table_dispersion(results: list[dict[str, Any]]) -> str:
+    return _md_lines(
+        "| mode | metric | n | median [IQR] | bootstrap 95% CI |",
+        "| --- | --- | ---: | --- | --- |",
+        _dispersion_rows(results),
+    )
+
+
+def dispersion_document(results: list[dict[str, Any]]) -> dict[str, Any]:
+    cells: list[dict[str, Any]] = []
+    for mode, metric, values, _digits in _dispersion_series(results):
+        stat = median_iqr_ci(values)
+        cells.append({"mode": mode, "metric": metric, **stat})
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in _gateway_results(results):
+        grouped[_gateway_cell(row)].append(row)
+    for cell, cell_rows in sorted(grouped.items()):
+        sizes = median_iqr_ci(
+            _metric_values(cell_rows, lambda r: (r.get("metrics") or {}).get("reachable_set_size"))
+        )
+        inter = median_iqr_ci(_metric_values(cell_rows, _b_intersect_r))
+        cells.append({"mode": cell, "metric": "|S|", **sizes})
+        cells.append({"mode": cell, "metric": "|B ∩ R|", **inter})
+    return {
+        "schema": "dispersion.schema.json",
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "cells": cells,
+    }
+
+
+def emit_dispersion_markdown(results: list[dict[str, Any]]) -> str:
+    gated = _task_results(results)
+    parts = [
+        "# Dispersion (M6)",
+        "",
+        source_caption(gated, "Dispersion"),
+        "",
+        table_dispersion(results),
+        "",
+        "Median [IQR]; bootstrap 95% CI for the median, 1000 resamples, seed 26.",
+        "",
+    ]
+    if _gateway_results(results):
+        parts.extend(
+            [
+                "## Gateway",
+                "",
+                table_gateway_dispersion(results),
+                "",
+            ]
+        )
+    return "\n".join(parts)
+
+
+def emit_dispersion_latex(results: list[dict[str, Any]]) -> str:
+    gated = _task_results(results)
+    parts = [
+        _tex_tabular(
+            gated,
+            "Dispersion",
+            "llrrr",
+            r"mode & metric & $n$ & median [IQR] & bootstrap 95\% CI",
+            _dispersion_rows(results),
+        ),
+        "",
+    ]
+    if _gateway_results(results):
+        parts.extend(
+            [
+                _tex_tabular(
+                    _gateway_results(results),
+                    "Gateway dispersion",
+                    "lrlrlr",
+                    r"mode & $n$ & median $|S|$ [IQR] & 95\% CI & median $|B \cap R|$ [IQR] & 95\% CI",
+                    _gateway_dispersion_rows(results),
+                ),
+                "",
+            ]
+        )
+    return "\n".join(parts)
+
+
 def _redeclaration_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in results if _is_redeclaration(r)]
 
 
 def _step_split_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in results if _is_step_split(r)]
+
+
+BOOTSTRAP_RESAMPLES = 1000
+BOOTSTRAP_SEED = 26
 
 
 def _median(values: list[float]) -> float:
@@ -736,6 +945,97 @@ def _median(values: list[float]) -> float:
     if len(ordered) % 2:
         return ordered[mid]
     return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return float("nan")
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    k = (len(ordered) - 1) * p
+    lo = math.floor(k)
+    hi = math.ceil(k)
+    if lo == hi:
+        return ordered[int(k)]
+    return ordered[lo] * (hi - k) + ordered[hi] * (k - lo)
+
+
+def _iqr(values: list[float]) -> tuple[float, float]:
+    return _percentile(values, 0.25), _percentile(values, 0.75)
+
+
+def median_iqr_ci(
+    values: list[float],
+    *,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> dict[str, Any]:
+    """Median, Tukey IQR, and percentile bootstrap 95% CI for the median."""
+    present = [float(v) for v in values]
+    if not present:
+        return {
+            "n": 0,
+            "median": None,
+            "q1": None,
+            "q3": None,
+            "iqr": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "resamples": resamples,
+            "bootstrap_seed": seed,
+        }
+    med = _median(present)
+    q1, q3 = _iqr(present)
+    rng = random.Random(seed)
+    n = len(present)
+    boot: list[float] = []
+    for _ in range(resamples):
+        sample = [present[rng.randrange(n)] for _ in range(n)]
+        boot.append(_median(sample))
+    boot.sort()
+    lo_idx = int(math.floor(0.025 * (resamples - 1)))
+    hi_idx = int(math.ceil(0.975 * (resamples - 1)))
+    lo_idx = max(0, min(resamples - 1, lo_idx))
+    hi_idx = max(0, min(resamples - 1, hi_idx))
+    return {
+        "n": n,
+        "median": med,
+        "q1": q1,
+        "q3": q3,
+        "iqr": q3 - q1,
+        "ci95_low": boot[lo_idx],
+        "ci95_high": boot[hi_idx],
+        "resamples": resamples,
+        "bootstrap_seed": seed,
+    }
+
+
+def _fmt_median_iqr(stat: dict[str, Any], digits: int = 3) -> str:
+    if not stat.get("n") or stat.get("median") is None:
+        return _EMDASH
+    fmt = f"{{:.{digits}f}}"
+    return (
+        f"{fmt.format(stat['median'])} "
+        f"[{fmt.format(stat['q1'])}, {fmt.format(stat['q3'])}]"
+    )
+
+
+def _fmt_ci(stat: dict[str, Any], digits: int = 3) -> str:
+    if not stat.get("n") or stat.get("ci95_low") is None:
+        return _EMDASH
+    fmt = f"{{:.{digits}f}}"
+    return f"{fmt.format(stat['ci95_low'])}–{fmt.format(stat['ci95_high'])}"
+
+
+def _metric_values(rows: list[dict[str, Any]], getter) -> list[float]:
+    out: list[float] = []
+    for row in rows:
+        value = getter(row)
+        if value is None:
+            continue
+        out.append(float(value))
+    return out
 
 
 def table_redeclaration(results: list[dict[str, Any]]) -> str:
@@ -930,6 +1230,14 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
         "",
         table_step(results),
         "",
+        "## Dispersion (M6)",
+        "",
+        source_caption(_task_results(results), "Dispersion"),
+        "",
+        table_dispersion(results),
+        "",
+        "Median [IQR]; bootstrap 95% CI for the median, 1000 resamples, seed 26.",
+        "",
         "## Sweep (k/|S|)",
         "",
         source_caption(_sweep_results(results), "Sweep"),
@@ -1003,6 +1311,14 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
             "rrrrr",
             r"seed & mean $\tau/T$ & max $\tau/T$ & mean $d$ (ms) & max $d$ (ms)",
             _step_rows(results),
+        ),
+        "",
+        _tex_tabular(
+            _task_results(results),
+            "Dispersion",
+            "llrrr",
+            r"mode & metric & $n$ & median [IQR] & bootstrap 95\% CI",
+            _dispersion_rows(results),
         ),
         "",
         _tex_tabular(
@@ -1164,7 +1480,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--table",
         default="",
-        help="optional table selector (sweep, evasion, data-intensive, gateway, redeclaration, step-split). empty = Paper 1 headline tables",
+        help="optional table selector (sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion). empty = Paper 1 headline tables",
     )
     args = parser.parse_args(argv)
     results = load_results(args.results)
@@ -1199,6 +1515,18 @@ def main(argv: list[str] | None = None) -> int:
         if not gated:
             print("refusing step-split table: no step_cost_split results", file=sys.stderr)
             return 1
+    elif table in ("dispersion", "median", "iqr"):
+        gated = [
+            r
+            for r in results
+            if not _is_sweep(r)
+            and not _is_data_intensive(r)
+            and not _is_redeclaration(r)
+            and not _is_step_split(r)
+        ]
+        if not gated:
+            print("refusing dispersion table: no task or gateway results", file=sys.stderr)
+            return 1
     elif table in ("", "all"):
         gated = [
             r
@@ -1211,7 +1539,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
     else:
         print(
-            f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split)",
+            f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion)",
             file=sys.stderr,
         )
         return 2
@@ -1287,15 +1615,29 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
         print(f"wrote {out_path}")
         return 0
+    if table in ("dispersion", "median", "iqr"):
+        if args.format == "latex":
+            text = emit_dispersion_latex(results)
+            out_path = args.out / "dispersion.tex"
+        else:
+            text = emit_dispersion_markdown(results)
+            out_path = args.out / "dispersion.md"
+        out_path.write_text(text)
+        (args.out / "dispersion.json").write_text(json.dumps(dispersion_document(results), indent=2) + "\n")
+        print(text)
+        print(f"wrote {out_path}")
+        return 0
     if args.format == "latex":
         text = emit_latex(results)
         out_path = args.out / "tables.tex"
         out_path.write_text(text)
+        (args.out / "dispersion.json").write_text(json.dumps(dispersion_document(results), indent=2) + "\n")
         print(text)
         print(f"wrote {out_path}")
         return 0
     markdown = emit_markdown(results)
     (args.out / "tables.md").write_text(markdown)
+    (args.out / "dispersion.json").write_text(json.dumps(dispersion_document(results), indent=2) + "\n")
     write_q2_figure(results, args.out)
     print(markdown)
     print(f"wrote {args.out / 'tables.md'}")

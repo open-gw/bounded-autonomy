@@ -4,7 +4,7 @@
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-.PHONY: help tools test validate up down run analyse paper-tables stores-smoke clean \
+.PHONY: help tools test validate up down run campaign analyse paper-tables stores-smoke clean \
 	notebook fixtures label-race
 
 ROOT    := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -20,13 +20,15 @@ MANIFEST ?=
 GATEWAY_BYPASS ?=
 PROBE ?=
 STEP_SPLIT ?=
+MODES   ?=
+SEEDS   ?= 1-10
 
 export PYTHONPATH := $(ROOT):$(ROOT)/analysis:$(ROOT)/rig:$(PYTHONPATH)
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*##"; printf "bounded-autonomy  Paper 1 rig\n\n"} \
 	     /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)  GRANULARITY=$(GRANULARITY)  VARIANT=$(VARIANT)  TABLE=$(TABLE)  PROBE=$(PROBE)  STEP_SPLIT=$(STEP_SPLIT)\n"
+	@printf "\n  PROFILE=$(PROFILE)  MODE=$(MODE)  SEED=$(SEED)  GRANULARITY=$(GRANULARITY)  VARIANT=$(VARIANT)  TABLE=$(TABLE)  PROBE=$(PROBE)  STEP_SPLIT=$(STEP_SPLIT)  MODES=$(MODES)  SEEDS=$(SEEDS)\n"
 
 tools: ## Install pinned k3d/kubectl/helm/cilium/hubble CLIs into .tools/
 	$(PYTHON) $(ROOT)/scripts/install_tools.py
@@ -58,6 +60,9 @@ down: ## k3d cluster delete (nothing else)
 
 run: ## Execute one profile (PROFILE MODE SEED GRANULARITY VARIANT PROBE STEP_SPLIT)
 	GRANULARITY=$(GRANULARITY) VARIANT=$(VARIANT) GATEWAY_BYPASS=$(GATEWAY_BYPASS) PROBE=$(PROBE) STEP_SPLIT=$(STEP_SPLIT) $(PYTHON) -m harness.driver --profile $(PROFILE) --mode $(MODE) --seed $(SEED) --granularity $(GRANULARITY) $(if $(VARIANT),--variant $(VARIANT),) $(if $(filter 1 true yes,$(GATEWAY_BYPASS)),--gateway-bypass,) $(if $(filter 0 false no off,$(PROBE)),--no-probe,) $(if $(filter 1 true yes,$(STEP_SPLIT)),--step-split,)
+
+campaign: ## Resume-on-failure campaign; per-run provenance (PROFILE MODES SEEDS GRANULARITY)
+	$(PYTHON) $(ROOT)/scripts/campaign.py --profile $(PROFILE) --modes '$(or $(MODES),flat,full)' --seeds '$(SEEDS)' --granularity '$(GRANULARITY)' --wait-idle
 
 stores-smoke: ## Write and read one object per store; confirm history/versioning
 	$(PYTHON) $(ROOT)/scripts/stores_smoke.py
