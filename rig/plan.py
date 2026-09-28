@@ -103,7 +103,10 @@ def build_step_plan(
     write_mix: Mapping[str, float] | None = None,
     declared: Sequence[str] | None = None,
     three_store: bool = False,
+    redeclare_at: int | None = None,
+    redeclare_tool: str | None = None,
 ) -> list[Step]:
+    del redeclare_at, redeclare_tool
     mix = write_mix or {
         "idempotent": 0.4,
         "versioned": 0.3,

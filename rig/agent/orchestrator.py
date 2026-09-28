@@ -9,6 +9,15 @@ from __future__ import annotations
 from plan import Step
 
 
+class UndeclaredTool(ValueError):
+    """Named so cluster/simulator imports succeed. Paper 1 pick_tool still raises ValueError."""
+
+    def __init__(self, tool: str, instruction: str = ""):
+        self.tool = tool
+        self.instruction = instruction
+        super().__init__(f"undeclared tool {tool!r}: {instruction!r}")
+
+
 def pick_tool(instruction: str, declared: list[str], last_result: dict | None) -> str:
     text = instruction.lower()
     for name in declared:
