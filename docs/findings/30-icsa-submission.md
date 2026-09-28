@@ -8,10 +8,10 @@ Recorded 28 September 2026. Does not re-run the Task 26 60-seed campaign. Does n
 | --- | --- |
 | Refresh [`ARTIFACT.md`](../../ARTIFACT.md) | Done. Maps headline tables plus every `TABLE=` selector. Documents median [IQR] / bootstrap CI from Task 26. |
 | `make paper-tables-all` | Done on this host over committed `source=cluster` `result.json` plus local `spans.parquet` (campaign parquet copied from the Task 26 worktree; parquet is gitignored). Simulator/fixtures refused. |
-| Tag `v1.1-icsa-submission` | Cut after this commit lands on `main`. |
-| GitHub release | Created from tag `v1.1-icsa-submission` after this commit is on `main`. URL: https://github.com/open-gw/bounded-autonomy/releases/tag/v1.1-icsa-submission |
-| Zenodo software version DOI for this tag | **Pending.** Concept DOI remains [10.5281/zenodo.23004818](https://doi.org/10.5281/zenodo.23004818). Prior version DOI [10.5281/zenodo.23004819](https://doi.org/10.5281/zenodo.23004819) is tag `v1.0.1-paper1`. Preprint [10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531). If the GitHub→Zenodo `release` hook mints a new version DOI, record it in `README.md`, `CITATION.cff`, and `.zenodo.json` the same way Task 22 did. Do not type a DOI that Zenodo has not issued. |
-| Anonymised mirror | `make anonymous` → `dist/bounded-autonomy-anonymous/` and `.tar.gz`. Grep-clean for author names and ORCID. |
+| Tag `v1.1-icsa-submission` | Annotated tag on `d7a5ff6e2526b36e937c782d02edfd258be661bf`. |
+| GitHub release | https://github.com/open-gw/bounded-autonomy/releases/tag/v1.1-icsa-submission (published 2026-09-28T11:31:14Z). |
+| Zenodo software version DOI for this tag | **Pending.** Polled Zenodo API after the hook: concept [10.5281/zenodo.23004818](https://doi.org/10.5281/zenodo.23004818) still has one version, [10.5281/zenodo.23004819](https://doi.org/10.5281/zenodo.23004819) (`v1.0.1-paper1`). Preprint [10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531). GitHub `release`/`released` delivery was `OK`; follow-up `created`/`published` returned `409` (same pattern as Task 22). Do not invent a DOI. When Zenodo lists a new version, record it in `README.md`, `CITATION.cff`, and `.zenodo.json`. |
+| Anonymised mirror | `make anonymous` → `dist/bounded-autonomy-anonymous/` and `.tar.gz`. Grep-clean for author names and ORCID (packager and its unit test are omitted from that tree). |
 
 ## `make paper-tables` (cluster only)
 
