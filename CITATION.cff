@@ -12,6 +12,7 @@ abstract: >-
 authors:
   - family-names: Dhanaraj
     given-names: Rinu
+    orcid: https://orcid.org/0009-0007-9082-8846
 repository-code: "https://github.com/open-gw/bounded-autonomy"
 url: "https://github.com/open-gw/bounded-autonomy"
 license: MIT
@@ -30,6 +31,9 @@ preferred-citation:
   authors:
     - family-names: Dhanaraj
       given-names: Rinu
+      orcid: https://orcid.org/0009-0007-9082-8846
   year: 2026
   url: "https://github.com/open-gw/bounded-autonomy"
-  notes: ICSA Paper 1 artefact; DOI pending arXiv posting.
+  notes: >-
+    ICSA Paper 1 artefact. U.S. Provisional Application No. 64/163,500,
+    filed September 27, 2026. DOI pending Zenodo/arXiv posting.

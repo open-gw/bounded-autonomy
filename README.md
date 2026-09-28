@@ -4,7 +4,13 @@ Containing and Unwinding the Blast Radius of Agentic Workflows — Paper 1 artef
 
 One-node k3d rig. One profile (`long-multistep`). Two modes (`flat`, `full`). Five seeds. Four metric exporters. Nothing from Paper 2 is in this repository.
 
-Cite this repository via [`CITATION.cff`](CITATION.cff) until an arXiv DOI exists. Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md).
+Cite this repository via [`CITATION.cff`](CITATION.cff) until a Zenodo or arXiv DOI exists. Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md).
+
+## Patent notice
+
+U.S. Provisional Application No. 64/163,500, filed September 27, 2026.
+
+Non-provisional or PCT deadline for this family: **27 September 2027** (AGA family: 19 August 2027). See [`docs/legal/DEADLINES.md`](docs/legal/DEADLINES.md). The filing receipt (mail, a few weeks) is what the non-provisional cites, not the Patent Center acknowledgement.
 
 ## What a run measures
 
@@ -82,7 +88,7 @@ make validate MANIFEST=runs/manifests/long-multistep-full.yaml
 ## Layout
 
 ```
-docs/           study design, architecture, findings, NEW-MATTER
+docs/           study design, architecture, findings, NEW-MATTER, legal deadlines
 rig/            cluster, controller, identity, stores, harness, …
 runs/manifests  one YAML per planned run
 runs/results    gitignored except result.json

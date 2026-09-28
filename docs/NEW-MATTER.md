@@ -2,8 +2,21 @@
 
 Anything the build forces that the manuscript does not describe. Review against the manuscript and the provisional before submission.
 
+## Patent notice
+
+U.S. Provisional Application No. 64/163,500, filed September 27, 2026.
+
+Disclosure gate is open. The Patent Center Electronic Acknowledgement Receipt is saved at [`docs/legal/64-163500-acknowledgement-2026-09-27.pdf`](legal/64-163500-acknowledgement-2026-09-27.pdf) (transcribed from the live submission-receipt page on 27 September 2026; USPTO did not drop a downloadable PDF into Downloads). Confirmation 3956; Patent Center 82346406; received 09/27/2026 8:11:13 PM ET. The **filing receipt** will arrive by mail in a few weeks; that document, not the acknowledgement, is what the non-provisional cites.
+
+## Deadlines
+
+- This family (64/163,500): non-provisional or PCT by **27 September 2027**.
+- AGA family (64/137,066): non-provisional or PCT by **19 August 2027**.
+- The two deadlines are five weeks apart. See [`docs/legal/DEADLINES.md`](legal/DEADLINES.md).
+
 ## Items
 
+- 2026-09-27 / Disclosure / U.S. Provisional Application No. 64/163,500, filed September 27, 2026. Acknowledgement at `docs/legal/64-163500-acknowledgement-2026-09-27.pdf`. Filing receipt (mail, later) is the document the non-provisional cites.
 - 2026-09-21 / Task 00 / `docs/study-design.md` was authored in this repository because no prior design document was in the checkout. Treat it as the frozen contract; if an earlier document surfaces, diff it here rather than silently overwriting.
 - 2026-09-21 / Task 14 / Original design document still not found (see `docs/findings/14-prereg-diff.md`). Reconstruction remains in place; it is not ratified as the pre-registration of record.
 - 2026-09-21 / Task 04 / CiliumNetworkPolicy cannot put a SPIFFE ID in a Kubernetes label value (`:` and `/` are illegal). The controller writes `bounded-autonomy.io/task-id` on the live pod (no restart) as the SPIRE selector and the CNP match. Paper 1 does not set `authentication.mode: required`.
