@@ -143,6 +143,9 @@ def compute_result(
         evasion_matrix = _evasion_matrix(evasion)
     if not gateway.empty or (run_dir / "gateway.parquet").exists():
         artefacts["gateway"] = "gateway.parquet"
+    gateway_403 = 0
+    if not gateway.empty and "status" in gateway.columns:
+        gateway_403 = int((pd.to_numeric(gateway["status"], errors="coerce") == 403).sum())
 
     result = {
         "schema_version": "1.0.0",
@@ -193,6 +196,11 @@ def compute_result(
                     "breach_intersection_size": len(intersection),
                 }
                 if breach or variant or meta.get("mode") in ("gateway-only", "gateway-bypass") or meta.get("gateway_bypass")
+                else {}
+            ),
+            **(
+                {"gateway_403": gateway_403}
+                if artefacts.get("gateway") or gateway_403
                 else {}
             ),
         },

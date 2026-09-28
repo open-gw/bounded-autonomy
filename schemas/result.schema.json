@@ -187,7 +187,8 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "breach_intersection_size": { "type": "integer", "minimum": 0 }
+        "breach_intersection_size": { "type": "integer", "minimum": 0 },
+        "gateway_403": { "type": "integer", "minimum": 0 }
       }
     },
     "policy_propagation_ms": {
@@ -207,8 +208,8 @@
     "step_cost_split": { "$ref": "#/$defs/stepCostSplit" },
     "evasion_matrix": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 9,
+      "maxItems": 9,
       "items": { "$ref": "#/$defs/evasionRow" }
     },
     "artefacts": {
@@ -272,14 +273,20 @@
       "additionalProperties": false,
       "required": ["row", "probe", "verdict", "latency_ms"],
       "properties": {
-        "row": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "row": { "type": "integer", "minimum": 1, "maximum": 9 },
+        "id": { "type": "string", "minLength": 1 },
         "probe": { "type": "string", "minLength": 1 },
         "target": { "type": "string" },
         "verdict": {
           "enum": ["allowed", "refused", "error", "host-refused"]
         },
         "latency_ms": { "type": "number", "minimum": 0 },
-        "detail": { "type": "string" }
+        "detail": { "type": "string" },
+        "leak": { "enum": ["", "name-resolution", "reach"] },
+        "policy_propagation_ms": { "type": "number", "minimum": 0 },
+        "probe_epoch": { "type": "number" },
+        "cnp_valid_epoch": { "type": "number" },
+        "seconds_after_cnp_valid": { "type": "number", "minimum": 0 }
       }
     },
     "stepCostSplit": {

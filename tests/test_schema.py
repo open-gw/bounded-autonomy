@@ -218,13 +218,15 @@ def _evasion_matrix() -> list[dict]:
     probes = [
         "direct_ip_declared",
         "direct_ip_undeclared",
-        "dns",
+        "dns_coredns_undeclared",
+        "dns_udp53_external",
         "external_https",
         "node_metadata",
-        "kubernetes_api",
+        "kubernetes_api_name",
+        "kubernetes_api_ip",
         "kubelet",
     ]
-    verdicts = ["allowed", "refused", "refused", "refused", "refused", "refused", "refused"]
+    verdicts = ["allowed"] + ["refused"] * 8
     return [
         {
             "row": i + 1,
@@ -234,7 +236,7 @@ def _evasion_matrix() -> list[dict]:
             "latency_ms": 1.5,
             "detail": "",
         }
-        for i in range(7)
+        for i in range(9)
     ]
 
 
@@ -252,7 +254,7 @@ def test_evasion_matrix_wrong_length_fails_extra_schema():
     doc["evasion_matrix"] = _evasion_matrix()[:3]
     doc["artefacts"]["evasion"] = "evasion.parquet"
     errors = extra_errors_result(doc)
-    assert any("length" in e or "1–7" in e or "1-7" in e for e in errors)
+    assert any("length" in e or "1–9" in e or "1-9" in e for e in errors)
 
 
 def test_evasion_bad_verdict_fails_schema():

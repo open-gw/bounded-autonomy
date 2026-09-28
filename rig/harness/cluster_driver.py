@@ -1010,7 +1010,19 @@ def run_cluster(
         _wait_cnp(task_id)
         probe_rows, flow_rows = cluster_probe(mode, seed, pod, task_id)
     if mode in ("flat", "full") and not gateway_bypass and not step_split and profile != "redeclaration":
-        evasion_rows = run_evasion(_kubectl, pod, NS, mode)
+        probe_epoch = time.time()
+        cnp_valid_epoch = None
+        if mode == "full":
+            cnp_valid_epoch = float(task_start) + (float(p_ms or 0.0) / 1000.0)
+        evasion_rows = run_evasion(
+            _kubectl,
+            pod,
+            NS,
+            mode,
+            policy_propagation_ms=float(p_ms or 0.0),
+            cnp_valid_epoch=cnp_valid_epoch,
+            probe_epoch=probe_epoch,
+        )
         write_evasion(out_dir / "evasion.parquet", evasion_rows)
     policy_removed_at: float | None = None
     entry_deleted_at: float | None = None

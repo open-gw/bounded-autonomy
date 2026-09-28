@@ -172,16 +172,16 @@ def extra_errors_result(doc: dict) -> list[str]:
         return errors
     if not isinstance(matrix, list):
         return ["evasion_matrix must be an array"]
-    if len(matrix) != 7:
-        errors.append(f"evasion_matrix length {len(matrix)}, expected 7")
+    if len(matrix) != 9:
+        errors.append(f"evasion_matrix length {len(matrix)}, expected 9")
     rows: list[int] = []
     for i, item in enumerate(matrix):
         if not isinstance(item, dict):
             errors.append(f"evasion_matrix[{i}] is not an object")
             continue
         row = item.get("row")
-        if not isinstance(row, int) or not (1 <= row <= 7):
-            errors.append(f"evasion_matrix[{i}].row must be 1..7")
+        if not isinstance(row, int) or not (1 <= row <= 9):
+            errors.append(f"evasion_matrix[{i}].row must be 1..9")
         else:
             rows.append(row)
         verdict = item.get("verdict")
@@ -192,8 +192,8 @@ def extra_errors_result(doc: dict) -> list[str]:
         lat = item.get("latency_ms")
         if not isinstance(lat, (int, float)) or float(lat) < 0:
             errors.append(f"evasion_matrix[{i}].latency_ms must be >= 0")
-    if rows and sorted(rows) != list(range(1, 8)):
-        errors.append(f"evasion_matrix rows must be 1–7 unique; got {sorted(rows)}")
+    if rows and sorted(rows) != list(range(1, 10)):
+        errors.append(f"evasion_matrix rows must be 1–9 unique; got {sorted(rows)}")
     artefacts = doc.get("artefacts") or {}
     if artefacts.get("evasion") != "evasion.parquet":
         errors.append("artefacts.evasion must be 'evasion.parquet' when evasion_matrix is set")

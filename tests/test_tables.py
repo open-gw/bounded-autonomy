@@ -6,12 +6,14 @@ from tables import (
     ProvenanceError,
     assert_cluster_provenance,
     emit_evasion_latex,
+    emit_gateway_latex,
     emit_latex,
     emit_markdown,
     load_results,
     main as analyse_main,
     source_caption,
     table_evasion,
+    table_gateway,
     table_overhead,
     table_reach,
     table_rollback,
@@ -254,21 +256,26 @@ def test_paper_tables_sweep_writes_tex(tmp_path):
 
 def _evasion_matrix(mode: str) -> list[dict]:
     if mode == "full":
-        verdicts = ["allowed", "refused", "refused", "refused", "refused", "refused", "refused"]
+        verdicts = ["allowed"] + ["refused"] * 8
     else:
-        verdicts = ["allowed", "allowed", "allowed", "host-refused", "host-refused", "allowed", "allowed"]
+        verdicts = [
+            "allowed", "allowed", "allowed", "allowed",
+            "host-refused", "host-refused", "allowed", "allowed", "allowed",
+        ]
     probes = [
         "direct_ip_declared",
         "direct_ip_undeclared",
-        "dns",
+        "dns_coredns_undeclared",
+        "dns_udp53_external",
         "external_https",
         "node_metadata",
-        "kubernetes_api",
+        "kubernetes_api_name",
+        "kubernetes_api_ip",
         "kubelet",
     ]
     return [
         {"row": i + 1, "probe": probes[i], "verdict": verdicts[i], "latency_ms": 1.0}
-        for i in range(7)
+        for i in range(9)
     ]
 
 
@@ -302,3 +309,119 @@ def test_paper_tables_evasion(tmp_path):
     assert "| 1 |" in md and "direct-IP" in md
     assert "host-refused" in md
     assert "1.1.1.1" in emit_evasion_latex(load_results(tmp_path)) or "external" in md
+
+
+def test_caption_n_uses_selector_not_tree_size(tmp_path):
+    """Default captions print the selector n, never the full results-tree n."""
+    import json
+
+    for i in range(3):
+        _cluster_run(tmp_path / "task", f"task-full-{i}", "full", 29)
+        doc = json.loads((tmp_path / "task" / f"task-full-{i}" / "result.json").read_text())
+        doc["metrics"] = {
+            "reachable_set_size": 3,
+            "reachable_weight": 7,
+            "tau_seconds": 1.0,
+            "T_seconds": 1.0,
+            "credential_ratio": 1.0,
+            "segment_p_ms": 1.0,
+            "segment_q_ms": 1.0,
+            "d_ms_mean": 1.0,
+            "d_ms_max": 1.0,
+            "rollback_completeness": {
+                "idempotent": {"rho_rev": 1.0, "n": 1, "restored": 1},
+                "versioned": {"rho_rev": 1.0, "n": 1, "restored": 1},
+                "derived": {"rho_rev": None, "n": 1, "quarantined": 1},
+                "irreversible": {"rho_rev": 0.0, "n": 1, "escalated": 1},
+            },
+            "verification_overhead": {"verify_ms": 1.0, "relative": 0.0, "total_ms": 1.0, "absolute_seconds": 0.001},
+        }
+        doc["declaration"] = {"granularity": "task", "services": ["records", "search", "notify"]}
+        doc["seed"] = i + 1
+        (tmp_path / "task" / f"task-full-{i}" / "result.json").write_text(json.dumps(doc))
+    for i in range(2):
+        _cluster_run(tmp_path / "sweep", f"sweep-k1-{i}", "full", 29)
+        doc = json.loads((tmp_path / "sweep" / f"sweep-k1-{i}" / "result.json").read_text())
+        doc["variant"] = "k1"
+        doc["declaration"] = {"granularity": "task", "services": ["records"], "variant": "k1"}
+        doc["metrics"] = {
+            "reachable_set_size": 1,
+            "reachable_weight": 3,
+            "breach_intersection_size": 0,
+            "tau_seconds": 1.0,
+            "T_seconds": 1.0,
+            "credential_ratio": 1.0,
+            "segment_p_ms": 1.0,
+            "segment_q_ms": 1.0,
+            "d_ms_mean": 1.0,
+            "d_ms_max": 1.0,
+            "rollback_completeness": {
+                "idempotent": {"rho_rev": 1.0, "n": 1, "restored": 1},
+                "versioned": {"rho_rev": 1.0, "n": 1, "restored": 1},
+                "derived": {"rho_rev": None, "n": 1, "quarantined": 1},
+                "irreversible": {"rho_rev": 0.0, "n": 1, "escalated": 1},
+            },
+            "verification_overhead": {"verify_ms": 1.0, "relative": 0.0, "total_ms": 1.0, "absolute_seconds": 0.001},
+        }
+        doc["seed"] = i + 1
+        (tmp_path / "sweep" / f"sweep-k1-{i}" / "result.json").write_text(json.dumps(doc))
+    results = load_results(tmp_path)
+    assert len(results) == 5
+    tex = emit_latex(results)
+    assert "n=97" not in tex
+    assert "Caption: Reach. source=cluster (n=3)." in tex
+    assert "Caption: Q2 series. source=cluster (n=3)." in tex
+    assert "Caption: Sweep. source=cluster (n=2)." in tex
+    md = emit_markdown(results)
+    assert "n=97" not in md
+    assert "source=cluster (n=3)" in md
+
+
+def test_evasion_mixed_cell_does_not_collapse_to_five_of_ten():
+    rows = []
+    for seed, verdict in enumerate(["refused"] * 5 + ["error"] * 5, start=1):
+        rows.append(
+            {
+                "mode": "full",
+                "seed": seed,
+                "declaration": {"granularity": "task"},
+                "evasion_matrix": [
+                    {"row": 3, "probe": "dns_coredns_undeclared", "verdict": verdict, "latency_ms": 1.0}
+                ],
+            }
+        )
+        rows.append(
+            {
+                "mode": "flat",
+                "seed": seed,
+                "declaration": {"granularity": "task"},
+                "evasion_matrix": [
+                    {"row": 3, "probe": "dns_coredns_undeclared", "verdict": "allowed", "latency_ms": 1.0}
+                ],
+            }
+        )
+    md = table_evasion(rows)
+    assert "refused (5/10)" not in md
+    assert "error 5" in md and "refused 5" in md
+    tex = emit_evasion_latex(rows)
+    assert "refused (5/10)" not in tex
+
+
+def test_gateway_403_column(tmp_path):
+    import json
+
+    run_dir = _cluster_run(tmp_path, "gw-only", "gateway-only", 30)
+    doc = json.loads((run_dir / "result.json").read_text())
+    doc["mode"] = "gateway-only"
+    doc["metrics"] = {
+        "reachable_set_size": 8,
+        "breach_intersection_size": 1,
+        "gateway_403": 2,
+    }
+    (run_dir / "result.json").write_text(json.dumps(doc))
+    md = table_gateway(load_results(tmp_path))
+    assert "gateway_403" in md
+    assert "| 2 |" in md
+    tex = emit_gateway_latex(load_results(tmp_path))
+    assert r"gateway\_403" in tex
+    assert " 2 " in tex or "& 2 &" in tex

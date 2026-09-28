@@ -93,6 +93,29 @@ def _task_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _step_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in results
+        if (r.get("declaration") or {}).get("granularity") == "step"
+        and not _is_step_split(r)
+        and not _is_redeclaration(r)
+    ]
+
+
+def _headline_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Default TABLE= gate: long-multistep task + step, no sweep/gateway/etc."""
+    return [
+        r
+        for r in results
+        if not _is_sweep(r)
+        and not _is_data_intensive(r)
+        and not _is_gateway(r)
+        and not _is_redeclaration(r)
+        and not _is_step_split(r)
+    ]
+
+
 def _data_intensive_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in results if _is_data_intensive(r)]
 
@@ -109,48 +132,101 @@ def _evasion_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _evasion_consensus(results: list[dict[str, Any]], mode: str, row: int) -> str:
-    verdicts = []
+def _evasion_cell(results: list[dict[str, Any]], mode: str, row: int) -> str:
+    """Consensus cell. Unanimous → ``verdict (n/n)``; mixed → counts, never 5/10."""
+    items: list[tuple[str, str]] = []
     for r in results:
         if r.get("mode") != mode:
             continue
         for item in r.get("evasion_matrix") or []:
             if int(item.get("row") or 0) == row:
-                verdicts.append(str(item.get("verdict") or "error"))
-    if not verdicts:
+                items.append(
+                    (str(item.get("verdict") or "error"), str(item.get("leak") or ""))
+                )
+    if not items:
         return _EMDASH
     counts: dict[str, int] = {}
-    for v in verdicts:
-        counts[v] = counts.get(v, 0) + 1
-    top = max(counts.items(), key=lambda kv: (kv[1], kv[0]))
-    return f"{top[0]} ({top[1]}/{len(verdicts)})"
+    for verdict, _leak in items:
+        counts[verdict] = counts.get(verdict, 0) + 1
+    n = len(items)
+    if len(counts) == 1:
+        verdict = next(iter(counts))
+        leaks = {leak for _v, leak in items if leak}
+        leak_tag = ""
+        if leaks == {"name-resolution"}:
+            leak_tag = "name-res. leak, "
+        elif leaks == {"reach"}:
+            leak_tag = "reach leak, "
+        return f"{verdict} ({leak_tag}{n}/{n})"
+    parts = [f"{verdict} {count}" for verdict, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return ", ".join(parts)
 
 
 _EVASION_LABELS = (
-    (1, "direct-IP declared service pod"),
-    (2, "direct-IP undeclared service pod"),
-    (3, "DNS undeclared via CoreDNS + raw UDP/53 to 1.1.1.1"),
-    (4, "external TCP/443 to 1.1.1.1"),
-    (5, "node metadata 169.254.169.254:80"),
-    (6, "kubernetes.default.svc:443 and ClusterIP"),
-    (7, "node IP kubelet :10250"),
+    (1, "1", "direct-IP declared service pod"),
+    (2, "2", "direct-IP undeclared service pod"),
+    (3, "3a", "CoreDNS undeclared name (docs.rig.svc.cluster.local)"),
+    (4, "3b", "raw UDP/53 to 1.1.1.1"),
+    (5, "4", "external TCP/443 to 1.1.1.1"),
+    (6, "5", "node metadata 169.254.169.254:80"),
+    (7, "6a", "kubernetes.default.svc:443 (name)"),
+    (8, "6b", "kubernetes ClusterIP:443"),
+    (9, "7", "node IP kubelet :10250"),
 )
+_EVASION_SPLIT_ROWS = (3, 4, 7, 8)
 
 
 def _evasion_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _evasion_results(results)
     rows: list[tuple[str, ...]] = []
-    for spec in ({"row": n, "label": label} for n, label in _EVASION_LABELS):
-        n = int(spec["row"])
+    for n, display, label in _EVASION_LABELS:
         rows.append(
             (
-                str(n),
-                str(spec["label"]),
-                _evasion_consensus(results, "flat", n),
-                _evasion_consensus(results, "full", n),
+                display,
+                label,
+                _evasion_cell(results, "flat", n),
+                _evasion_cell(results, "full", n),
             )
         )
     return rows
+
+
+def _fmt_epoch(value: Any) -> str:
+    if value is None or value == "":
+        return _EMDASH
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return _EMDASH
+
+
+def _evasion_seed_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    """Per-seed split-probe verdicts with policy-propagation timestamps."""
+    display = {n: disp for n, disp, _label in _EVASION_LABELS}
+    out: list[tuple[str, ...]] = []
+    for r in sorted(
+        _evasion_results(results),
+        key=lambda x: (str(x.get("mode") or ""), int(x.get("seed") or 0)),
+    ):
+        matrix = {int(item.get("row") or 0): item for item in (r.get("evasion_matrix") or [])}
+        for row in _EVASION_SPLIT_ROWS:
+            item = matrix.get(row)
+            if not item:
+                continue
+            leak = str(item.get("leak") or "")
+            out.append(
+                (
+                    str(r.get("mode") or ""),
+                    str(r.get("seed") or ""),
+                    display.get(row, str(row)),
+                    str(item.get("verdict") or "error"),
+                    leak or _EMDASH,
+                    _fmt_epoch(item.get("policy_propagation_ms")),
+                    _fmt_epoch(item.get("seconds_after_cnp_valid")),
+                    _fmt_epoch(item.get("probe_epoch")),
+                )
+            )
+    return out
 
 
 def table_evasion(results: list[dict[str, Any]]) -> str:
@@ -163,32 +239,66 @@ def table_evasion(results: list[dict[str, Any]]) -> str:
 
 def emit_evasion_markdown(results: list[dict[str, Any]]) -> str:
     gated = _evasion_results(results)
+    seed_rows = _evasion_seed_rows(results)
     parts = [
-        "# Evasion matrix (Task 23)",
+        "# Evasion matrix (Task 32 split of Task 23 rows 3 and 6)",
         "",
         source_caption(gated, "Evasion"),
         "",
         table_evasion(results),
         "",
         "DNS is restricted to CoreDNS for declared names only. External "
-        "resolver and TCP/443 target is Cloudflare `1.1.1.1`.",
+        "resolver and TCP/443 target is Cloudflare `1.1.1.1`. Rows 3a/3b "
+        "and 6a/6b are the former bundled probes; mixed cells list counts "
+        "and never collapse to 5/10. A CoreDNS or API-name success under "
+        "full is a name-resolution leak, not reach.",
         "",
     ]
+    if seed_rows:
+        parts.extend(
+            [
+                "## Split probes per seed",
+                "",
+                source_caption(gated, "Evasion per-seed"),
+                "",
+                _md_lines(
+                    "| mode | seed | row | verdict | leak | cnp_valid_ms | seconds after Valid | probe_epoch |",
+                    "| --- | ---: | --- | --- | --- | ---: | ---: | ---: |",
+                    seed_rows,
+                ),
+                "",
+            ]
+        )
     return "\n".join(parts)
 
 
 def emit_evasion_latex(results: list[dict[str, Any]]) -> str:
     gated = _evasion_results(results)
-    return (
+    parts = [
         _tex_tabular(
             gated,
             "Evasion",
             "rlll",
             r"row & probe & flat & full",
             _evasion_rows(results),
+        ),
+        "",
+    ]
+    seed_rows = _evasion_seed_rows(results)
+    if seed_rows:
+        parts.extend(
+            [
+                _tex_tabular(
+                    gated,
+                    "Evasion per-seed",
+                    "lrlrrrrr",
+                    r"mode & seed & row & verdict & leak & cnp Valid (ms) & s after Valid & probe epoch",
+                    seed_rows,
+                ),
+                "",
+            ]
         )
-        + "\n"
-    )
+    return "\n".join(parts)
 
 
 def _b_intersect_r(row: dict[str, Any]) -> int:
@@ -212,6 +322,24 @@ def _gateway_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in results if _is_gateway(r)]
 
 
+def count_gateway_403(frame: pd.DataFrame) -> int:
+    if frame is None or frame.empty or "status" not in frame.columns:
+        return 0
+    return int((pd.to_numeric(frame["status"], errors="coerce") == 403).sum())
+
+
+def _gateway_403(row: dict[str, Any]) -> int:
+    metrics = row.get("metrics") or {}
+    if "gateway_403" in metrics and metrics.get("gateway_403") is not None:
+        return int(metrics["gateway_403"])
+    path = row.get("_path")
+    if path:
+        parquet = Path(path).parent / "gateway.parquet"
+        if parquet.exists():
+            return count_gateway_403(pd.read_parquet(parquet))
+    return 0
+
+
 def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     rows: list[tuple[str, ...]] = []
     for row in sorted(
@@ -225,6 +353,7 @@ def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
                 str(row.get("seed") or ""),
                 str(metrics.get("reachable_set_size") or 0),
                 str(_b_intersect_r(row)),
+                str(_gateway_403(row)),
                 str(row.get("source") or ""),
             )
         )
@@ -233,8 +362,8 @@ def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
 
 def table_gateway(results: list[dict[str, Any]]) -> str:
     return _md_lines(
-        "| mode | seed | \\|S\\| | \\|B ∩ R\\| | source |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| mode | seed | \\|S\\| | \\|B ∩ R\\| | gateway_403 | source |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
         _gateway_rows(results),
     )
 
@@ -286,7 +415,9 @@ def emit_gateway_markdown(results: list[dict[str, Any]]) -> str:
         "",
         table_gateway_dispersion(results),
         "",
-        "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong.",
+        "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong. "
+        "`gateway_403` is the count of HTTP 403 rows in `gateway.parquet` "
+        "(uri-blocker rejections of undeclared paths).",
         "",
     ]
     return "\n".join(parts)
@@ -298,8 +429,8 @@ def emit_gateway_latex(results: list[dict[str, Any]]) -> str:
         _tex_tabular(
             gated,
             "Gateway",
-            "lrrrl",
-            r"mode & seed & $|S|$ & $|B \cap R|$ & source",
+            "lrrrrl",
+            r"mode & seed & $|S|$ & $|B \cap R|$ & gateway\_403 & source",
             _gateway_rows(results),
         )
         + "\n\n"
@@ -674,13 +805,7 @@ def table_segment(results: list[dict[str, Any]]) -> str:
 
 
 def _step_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
-    rows = [
-        r
-        for r in results
-        if (r.get("declaration") or {}).get("granularity") == "step"
-        and not _is_step_split(r)
-        and not _is_redeclaration(r)
-    ]
+    rows = _step_results(results)
     if not rows:
         return [(_EMDASH, _EMDASH, _EMDASH, _EMDASH, _EMDASH)]
     out: list[tuple[str, ...]] = []
@@ -1189,50 +1314,53 @@ def emit_step_split_latex(results: list[dict[str, Any]]) -> str:
 
 
 def emit_markdown(results: list[dict[str, Any]]) -> str:
+    task = _task_results(results)
+    step = _step_results(results)
+    sweep = _sweep_results(results)
     parts = [
         "# Manuscript tables",
         "",
-        source_caption(results, "all tables"),
+        source_caption(task, "all tables"),
         "",
         "## Reach",
         "",
-        source_caption(results, "Reach"),
+        source_caption(task, "Reach"),
         "",
         table_reach(results),
         "",
         "## Rollback",
         "",
-        source_caption(results, "Rollback"),
+        source_caption(task, "Rollback"),
         "",
         table_rollback(results),
         "",
         "## Overhead",
         "",
-        source_caption(results, "Overhead"),
+        source_caption(task, "Overhead"),
         "",
         table_overhead(results),
         "",
         "## Credentials (Q2)",
         "",
-        source_caption(results, "Credentials"),
+        source_caption(task, "Credentials"),
         "",
         table_credentials(results),
         "",
         "## Segment p/q/d (Q4)",
         "",
-        source_caption(results, "Segment"),
+        source_caption(task, "Segment"),
         "",
         table_segment(results),
         "",
         "## Step granularity",
         "",
-        source_caption(results, "Step"),
+        source_caption(step, "Step"),
         "",
         table_step(results),
         "",
         "## Dispersion (M6)",
         "",
-        source_caption(_task_results(results), "Dispersion"),
+        source_caption(task, "Dispersion"),
         "",
         table_dispersion(results),
         "",
@@ -1240,13 +1368,13 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
         "",
         "## Sweep (k/|S|)",
         "",
-        source_caption(_sweep_results(results), "Sweep"),
+        source_caption(sweep, "Sweep"),
         "",
         table_sweep(results),
         "",
         "## Q2 series",
         "",
-        source_caption(results, "Q2"),
+        source_caption(task, "Q2"),
         "",
         "| seed | mode | \\|S\\| | declared | extra |",
         "| ---: | --- | ---: | ---: | ---: |",
@@ -1260,13 +1388,17 @@ def emit_markdown(results: list[dict[str, Any]]) -> str:
 
 def emit_latex(results: list[dict[str, Any]]) -> str:
     """LaTeX-ready tabular rows for the manuscript. Same numbers as emit_markdown."""
+    task = _task_results(results)
+    step = _step_results(results)
+    sweep = _sweep_results(results)
     parts = [
         "% Manuscript tables (LaTeX-ready rows from make paper-tables)",
-        f"% {source_caption(results, 'all tables').strip('*')}",
+        f"% {source_caption(task, 'all tables').strip('*')}",
         "% Paste into Paper 1 tabulars. Simulator/fixture numbers must not be used.",
+        "% Each caption n is that table's selector, never the whole results tree.",
         "",
         _tex_tabular(
-            results,
+            task,
             "Reach",
             "lrrrrrr",
             r"mode & $n$ & mean $|S|$ & min & max & mean extra & mean $R_w$",
@@ -1274,7 +1406,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Rollback",
             "llrrr",
             r"mode & class & mean $\rho_{\mathrm{rev}}$ & mean $n$ & mean restored/quarantined/escalated",
@@ -1282,7 +1414,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Overhead",
             "lrrr",
             r"mode & $n$ & mean verify\_ms & mean relative vs same-seed flat",
@@ -1290,7 +1422,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Credentials",
             "lrrrr",
             r"mode & $n$ & mean $\tau$ (s) & mean $T$ (s) & mean $\tau/T$",
@@ -1298,7 +1430,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Segment",
             "lrrrrr",
             r"mode & $n$ & mean $p$ (ms) & mean $q$ (ms) & mean $d$ (ms) & max $d$ (ms)",
@@ -1306,7 +1438,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            step,
             "Step",
             "rrrrr",
             r"seed & mean $\tau/T$ & max $\tau/T$ & mean $d$ (ms) & max $d$ (ms)",
@@ -1314,7 +1446,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            _task_results(results),
+            task,
             "Dispersion",
             "llrrr",
             r"mode & metric & $n$ & median [IQR] & bootstrap 95\% CI",
@@ -1322,7 +1454,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            task,
             "Q2 series",
             "rlrrr",
             r"seed & mode & $|S|$ & declared & extra",
@@ -1330,7 +1462,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            sweep,
             "Sweep",
             "rrrrrrr",
             r"$k$ & $n$ & mean $|R|$ & min $|R|$ & max $|R|$ & mean $R_w$ & mean $|B \cap R|$",
@@ -1338,7 +1470,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         ),
         "",
         _tex_tabular(
-            results,
+            sweep,
             "Sweep seeds",
             "lrrrrr",
             r"variant & seed & $k$ & $|R|$ & $R_w$ & $|B \cap R|$",
@@ -1456,7 +1588,7 @@ def write_q2_figure(results: list[dict[str, Any]], out_dir: Path) -> Path | None
     fig.text(
         0.5,
         0.01,
-        source_caption(results, "Q2 reachable-set figure").strip("*"),
+        source_caption(_task_results(results), "Q2 reachable-set figure").strip("*"),
         ha="center",
         fontsize=8,
     )
@@ -1528,15 +1660,7 @@ def main(argv: list[str] | None = None) -> int:
             print("refusing dispersion table: no task or gateway results", file=sys.stderr)
             return 1
     elif table in ("", "all"):
-        gated = [
-            r
-            for r in results
-            if not _is_sweep(r)
-            and not _is_data_intensive(r)
-            and not _is_gateway(r)
-            and not _is_redeclaration(r)
-            and not _is_step_split(r)
-        ]
+        gated = _headline_results(results)
     else:
         print(
             f"unknown TABLE={args.table!r} (supported: sweep, evasion, data-intensive, gateway, redeclaration, step-split, dispersion)",
