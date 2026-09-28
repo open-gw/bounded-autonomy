@@ -37,6 +37,7 @@ make down
 | Credentials (Q2) \(\tau\), \(T\), \(\tau/T\) | `make analyse` / `make paper-tables` | `tables.md` § Credentials; `tables.tex` `% Credentials` | `result.json` → `tau_seconds`, `T_seconds`, `credential_ratio`; underlying `svid.parquet` + `spans.parquet` |
 | Segment \(p/q/d\) (Q4) | `make analyse` / `make paper-tables` | `tables.md` § Segment; `tables.tex` `% Segment` | `result.json` → `segment_p_ms`, `segment_q_ms`, `d_ms_mean`, `d_ms_max` |
 | Step granularity | `make analyse` / `make paper-tables` | `tables.md` § Step; `tables.tex` `% Step` | `runs/results/long-multistep-full-step-seed{1–5}/result.json` (`declaration.granularity=step`) |
+| Declaration tightness sweep (k/\|S\|, §7.4) | `make paper-tables TABLE=sweep` | `analysis/output/sweep.md` / `.tex` | `runs/results/long-multistep-k{1,3,5,7}-full-seed{1–5}/result.json` (`variant`, `|R|`, `R_w`, `|B ∩ R|`) |
 | Re-declaration cost (M4 Q4) | `make paper-tables TABLE=redeclaration` | `analysis/output/redeclaration.md` / `.tex` | `runs/results/redeclaration-full-seed{1–5}/result.json` (`redeclaration_cost_ms`) |
 | Per-step cost split (probe on/off) | `make paper-tables TABLE=step-split` | `analysis/output/step-split.md` / `.tex` | `runs/results/long-multistep-full-step-{split,noprobe}-seed{n}/result.json` |
 | Q2 grouped-bar figure (\|S\| by seed and mode) | `make analyse` | `analysis/output/q2-reachable-set.png` | same `result.json` set as Reach; series also in `tables.md` § Q2 / `tables.tex` `% Q2 series` |
