@@ -1,5 +1,5 @@
 # Citation File Format 1.2.0 — Paper 1 / bounded-autonomy artefact.
-# Cite the Zenodo preprint (publication DOI). No GitHub/Zenodo repository DOI yet.
+# Software concept DOI is the repository DOI. Preferred citation is the preprint.
 cff-version: 1.2.0
 message: If you use this Paper 1 artefact, please cite it using these metadata.
 type: software
@@ -15,13 +15,17 @@ authors:
     orcid: https://orcid.org/0009-0007-9082-8846
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.23004818
+    description: Concept DOI for all versions of this software
+  - type: doi
+    value: 10.5281/zenodo.23004819
+    description: Version DOI for tag v1.0.1-paper1
+  - type: doi
     value: 10.5281/zenodo.23004531
     description: Paper 1 preprint on Zenodo
-  - type: url
-    value: "https://doi.org/10.5281/zenodo.23004531"
 repository-code: "https://github.com/open-gw/bounded-autonomy"
-url: "https://doi.org/10.5281/zenodo.23004531"
-doi: 10.5281/zenodo.23004531
+url: "https://doi.org/10.5281/zenodo.23004818"
+doi: 10.5281/zenodo.23004818
 license: MIT
 keywords:
   - bounded-autonomy

@@ -8,11 +8,15 @@ Table/figure → command map: [`ARTIFACT.md`](ARTIFACT.md). How to cite: [Cite](
 
 ## Cite
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23004819.svg)](https://doi.org/10.5281/zenodo.23004819)
+
 Preprint DOI: [https://doi.org/10.5281/zenodo.23004531](https://doi.org/10.5281/zenodo.23004531)
 
-Dhanaraj, R. (2026). Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows (Version v1.0). Zenodo. https://doi.org/10.5281/zenodo.23004531
+Repository version DOI: [https://doi.org/10.5281/zenodo.23004819](https://doi.org/10.5281/zenodo.23004819) (tag `v1.0.1-paper1`)
 
-Repository DOI badge: pending Zenodo GitHub archive of tag `v1.0.1-paper1` (do not invent a DOI).
+Repository concept DOI: [https://doi.org/10.5281/zenodo.23004818](https://doi.org/10.5281/zenodo.23004818)
+
+Dhanaraj, R. (2026). Bounded Autonomy: Containing and Unwinding the Blast Radius of Agentic Workflows (Version v1.0). Zenodo. https://doi.org/10.5281/zenodo.23004531
 
 See [`CITATION.cff`](CITATION.cff).
 
