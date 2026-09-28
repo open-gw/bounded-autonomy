@@ -86,6 +86,65 @@
     "spans": "spans.parquet",
     "lineage": "lineage.parquet",
     "groundtruth": "groundtruth.parquet",
-    "svid": "svid.parquet"
-  }
+    "svid": "svid.parquet",
+    "evasion": "evasion.parquet"
+  },
+  "evasion_matrix": [
+    {
+      "row": 1,
+      "probe": "direct_ip_declared",
+      "target": "10.42.0.48:8081 (records pod)",
+      "verdict": "allowed",
+      "latency_ms": 6.305082992184907,
+      "detail": "bypass Service name; connect to pod IP of records"
+    },
+    {
+      "row": 2,
+      "probe": "direct_ip_undeclared",
+      "target": "10.42.0.106:8082 (docs pod)",
+      "verdict": "refused",
+      "latency_ms": 2002.4038340197876,
+      "detail": "pod IP of undeclared docs"
+    },
+    {
+      "row": 3,
+      "probe": "dns",
+      "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
+      "verdict": "refused",
+      "latency_ms": 2062.4552089720964,
+      "detail": "coredns_undeclared=refused ips=[]; udp53_1.1.1.1=refused"
+    },
+    {
+      "row": 4,
+      "probe": "external_https",
+      "target": "1.1.1.1:443",
+      "verdict": "refused",
+      "latency_ms": 2002.459209994413,
+      "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
+    },
+    {
+      "row": 5,
+      "probe": "node_metadata",
+      "target": "169.254.169.254:80",
+      "verdict": "refused",
+      "latency_ms": 2000.7497090264224,
+      "detail": "link-local cloud metadata; k3d has no IMDS"
+    },
+    {
+      "row": 6,
+      "probe": "kubernetes_api",
+      "target": "kubernetes.default.svc:443+10.43.0.1",
+      "verdict": "refused",
+      "latency_ms": 2008.9712929911911,
+      "detail": "dns=error; tcp_name=skipped; tcp_clusterip=refused"
+    },
+    {
+      "row": 7,
+      "probe": "kubelet",
+      "target": "172.18.0.3:10250",
+      "verdict": "refused",
+      "latency_ms": 2002.2202100371942,
+      "detail": "node InternalIP kubelet"
+    }
+  ]
 }

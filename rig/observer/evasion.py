@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import errno
 import json
+import socket
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -75,6 +76,11 @@ _HOST_ERRNOS = {
 if hasattr(errno, "EHOSTDOWN"):
     _HOST_ERRNOS.add(errno.EHOSTDOWN)
 
+_DNS_REFUSE_ERRNOS = {-2, -3, -4, -5}
+for _name in ("EAI_NONAME", "EAI_AGAIN", "EAI_FAIL", "EAI_NODATA", "EAI_SERVICE"):
+    if hasattr(socket, _name):
+        _DNS_REFUSE_ERRNOS.add(int(getattr(socket, _name)))
+
 
 def classify_verdict(
     *,
@@ -94,6 +100,8 @@ def classify_verdict(
     code = int(err or 0)
     if code in _HOST_ERRNOS:
         return "host-refused"
+    if row == 3 and code in _DNS_REFUSE_ERRNOS:
+        return "refused"
     if timed_out or code in {errno.ETIMEDOUT, errno.EAGAIN}:
         if mode == "flat" and row in {4, 5}:
             return "host-refused"
@@ -330,10 +338,18 @@ def _combine_k8s(
     parts = []
     verdicts = []
     latency = 0.0
-    for label, att, row_for_timeout in (
-        ("dns", name_dns, 6),
-        ("tcp_name", name_tcp, 6),
-        ("tcp_clusterip", ip_tcp, 6),
+    v_dns = classify_verdict(
+        ok=bool(name_dns.get("ok")),
+        err=name_dns.get("errno"),
+        mode=mode,
+        row=6,
+        timed_out=bool(name_dns.get("timed_out")),
+    )
+    parts.append(f"dns={v_dns}")
+    latency += float(name_dns.get("latency_ms") or 0.0)
+    for label, att in (
+        ("tcp_name", name_tcp),
+        ("tcp_clusterip", ip_tcp),
     ):
         if att.get("skipped"):
             parts.append(f"{label}=skipped")
@@ -342,7 +358,7 @@ def _combine_k8s(
             ok=bool(att.get("ok")),
             err=att.get("errno"),
             mode=mode,
-            row=row_for_timeout,
+            row=6,
             timed_out=bool(att.get("timed_out")),
         )
         verdicts.append(v)

@@ -37,6 +37,7 @@ make down
 | Credentials (Q2) \(\tau\), \(T\), \(\tau/T\) | `make analyse` / `make paper-tables` | `tables.md` § Credentials; `tables.tex` `% Credentials` | `result.json` → `tau_seconds`, `T_seconds`, `credential_ratio`; underlying `svid.parquet` + `spans.parquet` |
 | Segment \(p/q/d\) (Q4) | `make analyse` / `make paper-tables` | `tables.md` § Segment; `tables.tex` `% Segment` | `result.json` → `segment_p_ms`, `segment_q_ms`, `d_ms_mean`, `d_ms_max` |
 | Step granularity | `make analyse` / `make paper-tables` | `tables.md` § Step; `tables.tex` `% Step` | `runs/results/long-multistep-full-step-seed{1–5}/result.json` (`declaration.granularity=step`) |
+| Evasion matrix (7 probes × verdict) | `make paper-tables TABLE=evasion` | `analysis/output/evasion.tex` / `evasion.md` | `result.json` → `evasion_matrix`; underlying `evasion.parquet` |
 | Q2 grouped-bar figure (\|S\| by seed and mode) | `make analyse` | `analysis/output/q2-reachable-set.png` | same `result.json` set as Reach; series also in `tables.md` § Q2 / `tables.tex` `% Q2 series` |
 | `\val{}` slots | filled from the cluster `result.json` files, not from `analysis/fixtures/` | `runs/results/long-multistep-{flat,full}-seed{1–5}/result.json` (ten task-granularity runs) plus five step runs | produced by `make run` after `make up` |
 | Section VI measurement host | (recorded, not generated) | [`docs/findings/12-reproducibility.md`](docs/findings/12-reproducibility.md) | Apple M3 Pro, 12-core, 18 GiB, Darwin 25.5.0, Docker 29.7.2 / Desktop 4.87.0 |
@@ -56,6 +57,7 @@ Pre-registered Markdown notebook (synthetic fixtures only, **not** manuscript-pa
 | `lineage.parquet` | OpenLineage events |
 | `groundtruth.parquet` | store-level rollback truth |
 | `svid.parquet` | SPIRE issue/expiry for \(\tau\) |
+| `evasion.parquet` | seven-probe evasion matrix (Task 23; optional on older runs) |
 
 Run ids: `long-multistep-flat-seed{1–5}`, `long-multistep-full-seed{1–5}`, `long-multistep-full-step-seed{1–5}`. Directories whose path parts start with `_` are ignored by `analysis/tables.py`.
 

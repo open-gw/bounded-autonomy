@@ -44,7 +44,6 @@ Cilium selects the segment on `bounded-autonomy.io/task-id`, which the controlle
 | WAL / bucket notification / oplog subscribers | `groundtruth.parquet` | `rollback_completeness`, `rho_enum` |
 | SPIRE issue/expiry log | `svid.parquet` | `credential_ratio` |
 | Evasion probes from the agent pod | `evasion.parquet` | evasion matrix (Task 23) |
-| Evasion probes from the agent pod | `evasion.parquet` | evasion matrix (Task 23) |
 
 ## Span naming
 

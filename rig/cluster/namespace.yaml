@@ -18,18 +18,12 @@ metadata:
   name: default-deny
   namespace: rig
 spec:
-  description: default-deny agent datapath except DNS; segments add allow-lists
+  description: >-
+    idle agent default-deny; no unrestricted DNS. Task CNP is the only
+    DNS allow-list (CoreDNS, declared names only). See findings/23-evasion.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: agent
-  egress:
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kube-system
-        k8s:k8s-app: kube-dns
-    toPorts:
-    - ports:
-      - port: "53"
-        protocol: UDP
-      - port: "53"
-        protocol: TCP
+  enableDefaultDeny:
+    egress: true
+  egress: []
