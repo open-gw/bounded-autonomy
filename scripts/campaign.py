@@ -95,6 +95,9 @@ def job_run_id(
     seed: int,
     granularity: str,
     gateway_bypass: bool,
+    *,
+    probe: bool = True,
+    step_split: bool = False,
 ) -> str:
     return run_id_for(
         profile=profile,
@@ -102,6 +105,8 @@ def job_run_id(
         seed=seed,
         granularity=granularity,
         gateway_bypass=gateway_bypass,
+        probe=probe,
+        step_split=step_split,
     )
 
 
@@ -110,6 +115,9 @@ def expand_jobs(
     modes: Iterable[tuple[str, bool]],
     seeds: Iterable[int],
     granularities: Iterable[str],
+    *,
+    probe: bool = True,
+    step_split: bool = False,
 ) -> list[dict[str, object]]:
     jobs: list[dict[str, object]] = []
     for granularity in granularities:
@@ -117,7 +125,10 @@ def expand_jobs(
             if granularity == "step" and (mode != "full" or bypass):
                 continue
             for seed in seeds:
-                run_id = job_run_id(profile, mode, int(seed), granularity, bool(bypass))
+                run_id = job_run_id(
+                    profile, mode, int(seed), granularity, bool(bypass),
+                    probe=probe, step_split=step_split,
+                )
                 jobs.append(
                     {
                         "profile": profile,
@@ -126,6 +137,8 @@ def expand_jobs(
                         "granularity": granularity,
                         "gateway_bypass": bool(bypass),
                         "run_id": run_id,
+                        "no_probe": not probe,
+                        "step_split": step_split,
                     }
                 )
     return jobs
@@ -148,7 +161,16 @@ def provenance_ok(result_path: Path) -> tuple[bool, str]:
 
 
 def is_complete(out_dir: Path) -> bool:
-    ok, _ = provenance_ok(out_dir / "result.json")
+    result_path = out_dir / "result.json"
+    if not result_path.exists():
+        return False
+    try:
+        doc = json.loads(result_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    if doc.get("superseded_by"):
+        return False
+    ok, _ = provenance_ok(result_path)
     return ok
 
 
@@ -177,6 +199,10 @@ def run_job(job: dict[str, object], out_root: Path) -> int:
     ]
     if job["gateway_bypass"]:
         cmd.append("--gateway-bypass")
+    if job.get("no_probe"):
+        cmd.append("--no-probe")
+    if job.get("step_split"):
+        cmd.append("--step-split")
     print(f"RUN {' '.join(cmd)}", flush=True)
     proc = subprocess.run(cmd, cwd=ROOT, env=env)
     if proc.returncode != 0:
@@ -249,6 +275,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results", type=Path, default=ROOT / "runs" / "results")
     parser.add_argument("--wait-idle", action="store_true", help="wait for other make run/campaign jobs")
     parser.add_argument("--wait-timeout", type=int, default=0)
+    parser.add_argument("--no-probe", action="store_true", help="observer.probe=false")
+    parser.add_argument("--step-split", action="store_true", help="record per-boundary SVID/propagation/probe clocks")
     args = parser.parse_args(argv)
 
     if args.profile == "all":
@@ -270,7 +298,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         jobs: list[dict[str, object]] = []
         for profile in profiles:
-            jobs.extend(expand_jobs(profile, modes, seeds, granularities))
+            jobs.extend(
+                expand_jobs(
+                    profile,
+                    modes,
+                    seeds,
+                    granularities,
+                    probe=not args.no_probe,
+                    step_split=bool(args.step_split),
+                )
+            )
         skipped = failed = ran = 0
         for job in jobs:
             out_dir = args.results / str(job["run_id"])

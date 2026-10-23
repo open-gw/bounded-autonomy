@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 6,
-  "started_at": "2026-09-28T06:59:42.074585Z",
-  "finished_at": "2026-09-28T06:59:42.465045Z",
-  "wall_clock_seconds": 0.3904600143432617,
+  "started_at": "2026-09-28T13:40:18.794553Z",
+  "finished_at": "2026-09-28T13:40:19.051534Z",
+  "wall_clock_seconds": 0.25698089599609375,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed6",
@@ -16,7 +16,10 @@
       "search",
       "notify"
     ],
-    "expected_duration_seconds": 1800,
+    "expected_duration_seconds": 23,
+    "expected_step_duration_seconds": 1,
+    "expected_task_duration_s": 23,
+    "expected_step_duration_s": 1,
     "granularity": "task"
   },
   "steps_completed": 30,
@@ -27,33 +30,42 @@
     "irreversible": 3
   },
   "metrics": {
-    "reachable_set_size": 3,
+    "reachable_set_size": 7,
     "reachable_services": [
+      "analytics",
+      "audit",
+      "billing",
+      "catalog",
       "notify",
       "records",
       "search"
     ],
-    "reachable_weight": 7,
-    "credential_ratio": 4659.5036690962725,
+    "reachable_weight": 11,
+    "credential_ratio": 90.56939235160857,
     "credential_ratio_derivation": {
       "formula": "credential_ratio = tau_seconds / T_seconds",
-      "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
-      "tau_seconds": 1800.0,
-      "T_seconds": 0.3863072395324707,
-      "credential_kind": "jwt-svid"
+      "tau_definition": "jwt_ttl",
+      "tau_seconds": 23.0,
+      "T_seconds": 0.2539489269256592,
+      "credential_kind": "jwt-svid",
+      "T_definition": "first to last tool call"
     },
-    "tau_seconds": 1800.0,
-    "T_seconds": 0.3863072395324707,
-    "tau_issued_epoch": 1790578781.0,
-    "tau_not_after_epoch": 1790580581.0,
-    "T_start_epoch": 1790578782.074586,
-    "T_end_epoch": 1790578782.4608932,
-    "residual_svid_seconds": 1798.4645450115204,
-    "residual_policy_seconds": 0.7895898818969727,
-    "entry_deleted_at_epoch": 1790578866.10498,
-    "policy_removed_at_epoch": 1790578783.3250449,
-    "task_end_epoch": 1790578782.535455,
+    "tau_seconds": 23.0,
+    "T_seconds": 0.2539489269256592,
+    "tau_issued_epoch": 1790602818.0,
+    "tau_not_after_epoch": 1790602841.0,
+    "T_start_epoch": 1790602818.794629,
+    "T_end_epoch": 1790602819.048578,
+    "residual_svid_seconds": 21.908483028411865,
+    "residual_policy_seconds": 0.14084625244140625,
+    "residual_credential_s": 21.908483028411865,
+    "residual_reach_ms": 140.84625244140625,
+    "entry_deleted_at_epoch": 1790602845.3944151,
+    "policy_removed_at_epoch": 1790602819.2323632,
+    "task_end_epoch": 1790602819.091517,
     "credential_kind": "jwt-svid",
+    "jwt_ttl_requested_seconds": 23,
+    "jwt_ttl_granted_seconds": 23,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
@@ -90,25 +102,26 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": -0.00048245899999999975,
-      "relative": 0.3932210730588176,
-      "verify_ms": 1.737999,
-      "total_ms": 388.04533200000003
+      "absolute_seconds": -0.0003583309999999995,
+      "relative": -0.08119814863268024,
+      "verify_ms": 1.8621270000000003,
+      "total_ms": 255.90825199999998
     },
-    "segment_p_ms": 63.47012519836426,
-    "segment_q_ms": 789.5898818969727,
+    "segment_p_ms": 45.51100730895996,
+    "segment_q_ms": 140.84625244140625,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 63.47012519836426,
-    "d_ms_max": 63.47012519836426,
+    "d_ms_mean": 45.51100730895996,
+    "d_ms_max": 45.51100730895996,
     "breach_services": [
       "docs"
     ],
     "breach_intersection": [],
-    "breach_intersection_size": 0
+    "breach_intersection_size": 0,
+    "gateway_403": 2
   },
   "policy_propagation_ms": [
-    63.47012519836426
+    45.51100730895996
   ],
   "artefacts": {
     "probe": "probe.parquet",
@@ -126,31 +139,31 @@
       "probe": "direct_ip_declared",
       "target": "10.42.0.184:8081 (records pod)",
       "verdict": "allowed",
-      "latency_ms": 0.5083329742774367,
+      "latency_ms": 0.18358399393036962,
       "detail": "bypass Service name; connect to pod IP of records"
     },
     {
       "row": 2,
       "probe": "direct_ip_undeclared",
       "target": "10.42.0.105:8082 (docs pod)",
-      "verdict": "refused",
-      "latency_ms": 2003.2182509894483,
+      "verdict": "allowed",
+      "latency_ms": 0.15733297914266586,
       "detail": "pod IP of undeclared docs"
     },
     {
       "row": 3,
       "probe": "dns",
       "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
-      "verdict": "error",
-      "latency_ms": 2035.634208994452,
-      "detail": "coredns_undeclared=error ips=[]; udp53_1.1.1.1=refused"
+      "verdict": "allowed",
+      "latency_ms": 23.63637398229912,
+      "detail": "coredns_undeclared=allowed ips=['10.43.139.158']; udp53_1.1.1.1=allowed"
     },
     {
       "row": 4,
       "probe": "external_https",
       "target": "1.1.1.1:443",
-      "verdict": "refused",
-      "latency_ms": 2002.2191259777173,
+      "verdict": "allowed",
+      "latency_ms": 16.153000004123896,
       "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
     },
     {
@@ -158,24 +171,26 @@
       "probe": "node_metadata",
       "target": "169.254.169.254:80",
       "verdict": "refused",
-      "latency_ms": 2002.4692509905435,
+      "latency_ms": 2001.675209030509,
       "detail": "link-local cloud metadata; k3d has no IMDS"
     },
     {
       "row": 6,
       "probe": "kubernetes_api",
       "target": "kubernetes.default.svc:443+10.43.0.1",
-      "verdict": "error",
-      "latency_ms": 2004.683667968493,
-      "detail": "dns=error; tcp_name=skipped; tcp_clusterip=refused"
+      "verdict": "allowed",
+      "latency_ms": 4.650333954486996,
+      "detail": "dns=allowed; tcp_name=allowed; tcp_clusterip=allowed"
     },
     {
       "row": 7,
       "probe": "kubelet",
       "target": "172.18.0.3:10250",
-      "verdict": "refused",
-      "latency_ms": 2003.348792961333,
+      "verdict": "allowed",
+      "latency_ms": 0.4686250467784703,
       "detail": "node InternalIP kubelet"
     }
-  ]
+  ],
+  "jwt_ttl_requested_seconds": 23,
+  "jwt_ttl_granted_seconds": 23
 }

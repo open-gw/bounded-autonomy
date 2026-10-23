@@ -31,16 +31,34 @@ def _read(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def _epochs(svid: pd.DataFrame, spans: pd.DataFrame) -> dict[str, float | None]:
+def _epochs(svid: pd.DataFrame, spans: pd.DataFrame, meta: dict[str, Any] | None = None) -> dict[str, float | None]:
     issued = not_after = t0 = t1 = None
+    meta = meta or {}
     if not svid.empty and "issued_at_epoch" in svid.columns:
-        issued = float(pd.to_numeric(svid["issued_at_epoch"], errors="coerce").max())
+        issued = float(pd.to_numeric(svid["issued_at_epoch"], errors="coerce").min())
         not_after = float(pd.to_numeric(svid["not_after_epoch"], errors="coerce").max())
-    if not spans.empty:
-        runs = spans[spans.get("name", pd.Series(dtype=str)) == "run"] if "name" in spans.columns else pd.DataFrame()
-        if not runs.empty and "start_epoch" in runs.columns:
-            t0 = float(pd.to_numeric(runs["start_epoch"], errors="coerce").min())
-            t1 = float(pd.to_numeric(runs["end_epoch"], errors="coerce").max())
+        if "tau_seconds" not in svid.columns and issued is not None and not_after is not None:
+            pass
+        gran = (meta.get("declaration") or {}).get("granularity") or meta.get("granularity")
+        if gran == "step" and "issued_at_epoch" in svid.columns:
+            # Per-step JWT: τ is that SVID's exp−iat (uniform TTL); use the first row.
+            issued = float(pd.to_numeric(svid["issued_at_epoch"], errors="coerce").iloc[0])
+            not_after = float(pd.to_numeric(svid["not_after_epoch"], errors="coerce").iloc[0])
+    first_call = meta.get("first_call_epoch")
+    last_call = meta.get("last_call_epoch")
+    if first_call is not None and last_call is not None:
+        t0 = float(first_call)
+        t1 = float(last_call)
+    elif not spans.empty:
+        calls = spans[spans["name"].isin(["tool.call", "verify"])] if "name" in spans.columns else pd.DataFrame()
+        if not calls.empty and "start_epoch" in calls.columns and calls["start_epoch"].notna().any():
+            t0 = float(pd.to_numeric(calls["start_epoch"], errors="coerce").min())
+            t1 = float(pd.to_numeric(calls["end_epoch"], errors="coerce").max())
+        else:
+            runs = spans[spans["name"] == "run"] if "name" in spans.columns else pd.DataFrame()
+            if not runs.empty and "start_epoch" in runs.columns:
+                t0 = float(pd.to_numeric(runs["start_epoch"], errors="coerce").min())
+                t1 = float(pd.to_numeric(runs["end_epoch"], errors="coerce").max())
     tau = None if issued is None or not_after is None else not_after - issued
     t_sec = None if t0 is None or t1 is None else t1 - t0
     return {
@@ -82,7 +100,9 @@ def compute_result(
     ratio = credential_ratio(svid, spans)
     if ratio != ratio:  # NaN
         ratio = None
-    epochs = _epochs(svid, spans)
+    epochs = _epochs(svid, spans, meta)
+    if epochs["tau_seconds"] is not None and epochs["T_seconds"] and epochs["T_seconds"] > 0:
+        ratio = float(epochs["tau_seconds"]) / float(epochs["T_seconds"])
     step_ratios = [float(x) for x in (meta.get("step_ratios") or [])]
     d_ms = [float(x) for x in (meta.get("policy_propagation_ms") or [])]
     weight = meta.get("reachable_weight")
@@ -118,10 +138,11 @@ def compute_result(
         )
     derivation = {
         "formula": "credential_ratio = tau_seconds / T_seconds",
-        "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
+        "tau_definition": "jwt_ttl",
         "tau_seconds": epochs["tau_seconds"],
         "T_seconds": epochs["T_seconds"],
         "credential_kind": cred_kind,
+        "T_definition": "first to last tool call",
     }
 
     try:
@@ -143,6 +164,9 @@ def compute_result(
         evasion_matrix = _evasion_matrix(evasion)
     if not gateway.empty or (run_dir / "gateway.parquet").exists():
         artefacts["gateway"] = "gateway.parquet"
+    gateway_403 = 0
+    if not gateway.empty and "status" in gateway.columns:
+        gateway_403 = int((pd.to_numeric(gateway["status"], errors="coerce") == 403).sum())
 
     result = {
         "schema_version": "1.0.0",
@@ -173,10 +197,14 @@ def compute_result(
             "T_end_epoch": epochs["T_end_epoch"],
             "residual_svid_seconds": residual["residual_svid_seconds"],
             "residual_policy_seconds": residual["residual_policy_seconds"],
+            "residual_credential_s": residual.get("residual_credential_s", residual["residual_svid_seconds"]),
+            "residual_reach_ms": residual.get("residual_reach_ms"),
             "entry_deleted_at_epoch": None if entry_deleted is None else float(entry_deleted),
             "policy_removed_at_epoch": None if policy_removed is None else float(policy_removed),
             "task_end_epoch": None if task_end is None else float(task_end),
             "credential_kind": cred_kind,
+            "jwt_ttl_requested_seconds": meta.get("jwt_ttl_requested_seconds"),
+            "jwt_ttl_granted_seconds": meta.get("jwt_ttl_granted_seconds"),
             "rollback_completeness": rb,
             "rho_enum": rho_enum,
             "verification_overhead": overhead_out,
@@ -193,6 +221,11 @@ def compute_result(
                     "breach_intersection_size": len(intersection),
                 }
                 if breach or variant or meta.get("mode") in ("gateway-only", "gateway-bypass") or meta.get("gateway_bypass")
+                else {}
+            ),
+            **(
+                {"gateway_403": gateway_403}
+                if artefacts.get("gateway") or gateway_403
                 else {}
             ),
         },
@@ -217,6 +250,10 @@ def compute_result(
         result["step_cost_split"] = step_cost_split(
             boundaries, probe_enabled=bool(probe_flag if probe_flag is not None else True)
         )
+    if meta.get("jwt_ttl_requested_seconds") is not None:
+        result["jwt_ttl_requested_seconds"] = int(meta["jwt_ttl_requested_seconds"])
+    if meta.get("jwt_ttl_granted_seconds") is not None:
+        result["jwt_ttl_granted_seconds"] = int(meta["jwt_ttl_granted_seconds"])
     return result
 
 

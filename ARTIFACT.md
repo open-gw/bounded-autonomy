@@ -36,6 +36,7 @@ Paste from the dedicated `TABLE=` files when a selector exists. Default `make pa
 | Rollback table (per-class \(\rho_{\mathrm{rev}}\), restored/quarantined/escalated) | `make analyse` / `make paper-tables` | `tables.md` § Rollback; `tables.tex` `% Rollback` | `result.json` → `metrics.rollback_completeness` |
 | Overhead table (mean `verify_ms`, relative vs same-seed `flat`) | `make analyse` / `make paper-tables` | `tables.md` § Overhead; `tables.tex` `% Overhead` | `result.json` → `metrics.verification_overhead`; `spans.parquet` (`name=verify`) |
 | Credentials (Q2) \(\tau\), \(T\), \(\tau/T\) | `make analyse` / `make paper-tables` | `tables.md` § Credentials; `tables.tex` `% Credentials` | `result.json` → `tau_seconds`, `T_seconds`, `credential_ratio` |
+| Credentials (Task 31) \(\tau\), \(T\), \(\tau/T\), residual | `make paper-tables TABLE=credential` | `analysis/output/credential.tex` / `.md` | `long-multistep-{flat,full}-seed{1–10}` and `…-full-step-seed{1–10}`; `tau_definition: jwt_ttl`; median [IQR]; n per cell in the caption |
 | Segment \(p/q/d\) (Q4) | `make analyse` / `make paper-tables` | `tables.md` § Segment; `tables.tex` `% Segment` | `result.json` → `segment_p_ms`, `segment_q_ms`, `d_ms_mean`, `d_ms_max` |
 | Step granularity | `make analyse` / `make paper-tables` | `tables.md` § Step; `tables.tex` `% Step` | `runs/results/long-multistep-full-step-seed{1–10}/result.json` |
 | Dispersion (M6) median [IQR] + bootstrap 95% CI | `make paper-tables TABLE=dispersion` | `analysis/output/dispersion.tex` / `.md` / `.json` | task `flat`/`full` seeds 1–10 plus gateway cells; schema `schemas/dispersion.schema.json` |
@@ -43,13 +44,13 @@ Paste from the dedicated `TABLE=` files when a selector exists. Default `make pa
 | Declaration tightness sweep (k/\|S\|, §7.4) | `make paper-tables TABLE=sweep` | `analysis/output/sweep.md` / `.tex` | `long-multistep-k{1,3,5,7}-full-seed{1–5}` |
 | Evasion matrix (7 probes × verdict) | `make paper-tables TABLE=evasion` | `analysis/output/evasion.tex` / `evasion.md` | `result.json` → `evasion_matrix`; `evasion.parquet` |
 | Re-declaration cost (M4 Q4) | `make paper-tables TABLE=redeclaration` | `analysis/output/redeclaration.md` / `.tex` | `redeclaration-full-seed{1–5}` (`redeclaration_cost_ms`) |
-| Per-step cost split (probe on/off) | `make paper-tables TABLE=step-split` | `analysis/output/step-split.md` / `.tex` | `long-multistep-full-step-{split,noprobe}-seed{n}` |
+| Per-step cost split (probe on/off) | `make paper-tables TABLE=step-split` | `analysis/output/step-split.md` / `.tex` | Per-boundary median [IQR]. Probe-on: `long-multistep-full-step-seed{1–10}` (290 boundaries). Probe-off: `…-step-noprobe-seed{1–5}` (145). `d` = `cnp_wait_started → cnp_valid`; `propagation` = declaration apply returned → first enforced (CNP Valid). Caption states the number of boundaries |
 | Data-intensive profile (G4 / Q3) | `make paper-tables TABLE=data-intensive` | `analysis/output/data-intensive.md` / `.tex` | `data-intensive-full-seed{1–10}` |
 | Q2 grouped-bar figure (\|S\| by seed and mode) | `make analyse` | `analysis/output/q2-reachable-set.png` | same `result.json` set as Reach |
 | `\val{}` slots | cluster `result.json` only, never `analysis/fixtures/` | committed under `runs/results/` | produced by `make run` / `make campaign` after `make up` |
 | Section VI measurement host | (recorded, not generated) | [`docs/findings/12-reproducibility.md`](docs/findings/12-reproducibility.md) | Apple M3 Pro, 12-core, 18 GiB, Darwin 25.5.0, Docker 29.7.2 / Desktop 4.87.0 |
 
-`make paper-tables-all` runs the default target and every `TABLE=` selector above. Generated files under `analysis/output/` are local (gitignored); the committed record of the numbers is `docs/findings/26-campaign.md` through `29-data-intensive.md` plus this map.
+`make paper-tables-all` runs the default target and every `TABLE=` selector above. Generated files under `analysis/output/` are local (gitignored); the committed record of the numbers is `docs/findings/26-campaign.md` through `31-credential-campaign.md` plus this map.
 
 Pre-registered Markdown notebook (synthetic fixtures only, **not** manuscript-pasteable): `make notebook` → `analysis/notebook.ipynb` on `analysis/fixtures/results/`.
 

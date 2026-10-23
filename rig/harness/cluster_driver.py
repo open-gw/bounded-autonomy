@@ -18,13 +18,16 @@ from controller.cnp import render_cnp, render_pod_spire_entry, render_spire_entr
 from controller.gateway import apply_gateway_routes
 from harness.simulator import INVENTORY, _spiffe, _task_id, run_local
 from identity.svid import (
-    DEFAULT_STEP_JWT_TTL_SECONDS,
-    DEFAULT_TASK_JWT_TTL_SECONDS,
     JWT_AUDIENCE,
     decode_jwt_claims,
     extract_jwt_token,
     parse_entry_ids,
     tau_from_claims,
+)
+from agent.duration_policy import (
+    durations_for_plan,
+    grant_jwt_ttl_seconds,
+    requested_jwt_ttl_seconds,
 )
 from observer.evasion import run_evasion, write_evasion
 from observer.tempo import fetch_spans
@@ -186,9 +189,14 @@ def _ensure_agent(task_id: str, mode: str, pod_name: str = "agent") -> str:
     return pod_name
 
 
-def _wait_cnp(task_id: str, timeout: float = 60.0) -> float:
-    t0 = time.time()
-    deadline = t0 + timeout
+def _wait_cnp_clock(task_id: str, timeout: float = 60.0) -> tuple[float, float, float]:
+    """Poll egress CNP Valid. Returns (d_ms, cnp_wait_started_epoch, cnp_valid_epoch).
+
+    ``d`` is this wait: cnp_wait_started → cnp_valid. Same instrument as
+    Task 26 ``d_ms_mean`` / ``policy_propagation_ms`` (host kubectl poll).
+    """
+    wait_started = time.time()
+    deadline = wait_started + timeout
     while time.time() < deadline:
         listing = _kubectl("-n", NS, "get", "cnp", "-o", "json", check=False)
         try:
@@ -205,9 +213,15 @@ def _wait_cnp(task_id: str, timeout: float = 60.0) -> float:
             conds = (item.get("status") or {}).get("conditions") or []
             ready = any(c.get("type") == "Valid" and str(c.get("status")) == "True" for c in conds)
         if ready:
-            return (time.time() - t0) * 1000.0
-        time.sleep(0.2)
+            valid_at = time.time()
+            return (valid_at - wait_started) * 1000.0, wait_started, valid_at
+        time.sleep(0.05)
     raise RuntimeError(f"CNP for {task_id} did not become Valid")
+
+
+def _wait_cnp(task_id: str, timeout: float = 60.0) -> float:
+    d_ms, _started, _valid = _wait_cnp_clock(task_id, timeout=timeout)
+    return d_ms
 
 
 def _apply_declaration(
@@ -215,9 +229,10 @@ def _apply_declaration(
     services: list[str],
     granularity: str,
     *,
-    expected_duration: int = DEFAULT_TASK_JWT_TTL_SECONDS,
-    expected_step_duration: int = DEFAULT_STEP_JWT_TTL_SECONDS,
+    expected_duration: int,
+    expected_step_duration: int,
     segment_enabled: bool = True,
+    provision_identity: bool = True,
 ) -> str:
     created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     svc_yaml = "\n".join(f"    - name: {name}" for name in services)
@@ -253,8 +268,10 @@ spec:
         rendered = render_cnp(task_id, NS, spec)
         docs = [rendered["egress"], *rendered["ingress"]]
         _apply_yaml("---\n".join(yaml.safe_dump(doc) for doc in docs))
-        _ensure_spire_task_entry(spec)
-    _apply_gateway_from_host(spec)
+        if provision_identity:
+            _ensure_spire_task_entry(spec)
+    if provision_identity:
+        _apply_gateway_from_host(spec)
     return created
 
 
@@ -379,6 +396,8 @@ def _set_mode_policy(
     services: list[str],
     granularity: str,
     *,
+    expected_duration: int,
+    expected_step_duration: int,
     gateway_bypass: bool = False,
     isolate: bool = False,
 ) -> float:
@@ -404,7 +423,14 @@ def _set_mode_policy(
         time.sleep(2)
         return 0.0
     segment = uses_segment(mode, gateway_bypass)
-    _apply_declaration(task_id, services, granularity, segment_enabled=segment)
+    _apply_declaration(
+        task_id,
+        services,
+        granularity,
+        expected_duration=expected_duration,
+        expected_step_duration=expected_step_duration,
+        segment_enabled=segment,
+    )
     if isolate and segment:
         _apply_undeclared_ingress_deny(task_id, services)
     if not segment:
@@ -497,6 +523,8 @@ def _mint_jwt_svid(spiffe_id: str, ttl: int) -> dict[str, Any]:
                 "iat": tau["iat"],
                 "exp": tau["exp"],
                 "tau_seconds": tau["tau_seconds"],
+                "ttl_requested_seconds": int(ttl),
+                "ttl_granted_seconds": int(round(tau["tau_seconds"])),
                 "spiffe_id": claims.get("sub") or spiffe_id,
             }
         except (ValueError, KeyError, IndexError):
@@ -571,6 +599,8 @@ def _sync_worker_code(pod: str) -> None:
         (ROOT / "rig" / "modes.py", f"{NS}/{pod}:/app/rig/modes.py"),
         (ROOT / "rig" / "harness" / "live_worker.py", f"{NS}/{pod}:/app/rig/harness/live_worker.py"),
         (ROOT / "rig" / "agent" / "orchestrator.py", f"{NS}/{pod}:/app/rig/agent/orchestrator.py"),
+        (ROOT / "rig" / "agent" / "duration_policy.py", f"{NS}/{pod}:/app/rig/agent/duration_policy.py"),
+        (ROOT / "rig" / "agent" / "duration_policy.yaml", f"{NS}/{pod}:/app/rig/agent/duration_policy.yaml"),
         (
             ROOT / "rig" / "harness" / "payloads" / "v-data.yaml",
             f"{NS}/{pod}:/app/rig/harness/payloads/v-data.yaml",
@@ -782,16 +812,36 @@ def run_cluster(
         pod_name = "agent"
     pod = _ensure_agent(task_id, mode, pod_name=pod_name)
     _sync_worker_code(pod)
+    plan_for_ttl = build_step_plan(
+        seed,
+        steps=int(spec.get("steps") or 30),
+        write_mix=spec.get("write_mix"),
+        declared=declared,
+        three_store=bool(spec.get("three_store")),
+        redeclare_at=spec.get("redeclare_at"),
+        redeclare_tool=spec.get("redeclare_tool") or "docs",
+    )
+    durs = durations_for_plan(plan_for_ttl)
+    expected_task_s = int(durs["expected_task_duration_s"])
+    expected_step_s = int(durs["expected_step_duration_s"])
+    jwt_requested = requested_jwt_ttl_seconds(
+        granularity=granularity, task_s=expected_task_s, step_s=expected_step_s
+    )
+    jwt_ttl = grant_jwt_ttl_seconds(jwt_requested)
     step_d: list[float] = []
     step_ratios: list[float] = []
     svid_rows: list[dict[str, Any]] = []
     task_jwt: dict[str, Any] | None = None
+    first_call_epoch: float | None = None
+    last_call_epoch: float | None = None
     task_start = time.time()
     p_ms = _set_mode_policy(
         mode,
         task_id,
         list(declared),
         granularity,
+        expected_duration=expected_task_s,
+        expected_step_duration=expected_step_s,
         gateway_bypass=gateway_bypass,
         isolate=bool(variant)
         or profile in ("redeclaration", "data-intensive")
@@ -802,16 +852,21 @@ def run_cluster(
         # DNS-proxy matchName attaches after CNP Valid; 2 s avoids a first-lookup blackhole.
         time.sleep(2)
     declared_arg = ",".join(declared)
-    jwt_ttl = (
-        DEFAULT_STEP_JWT_TTL_SECONDS
-        if granularity == "step"
-        else DEFAULT_TASK_JWT_TTL_SECONDS
-    )
     step_boundaries: list[dict[str, Any]] = []
     live_outcomes: list[dict[str, Any]] = []
     redeclaration_cost_ms: float | None = result.get("redeclaration_cost_ms")
     steps_reexecuted = int(result.get("steps_reexecuted") or 0)
     writes_committed = result.get("writes_committed_before_termination")
+
+    def _note_calls(worker_doc: dict[str, Any]) -> None:
+        nonlocal first_call_epoch, last_call_epoch
+        first = worker_doc.get("first_call_epoch")
+        last = worker_doc.get("last_call_epoch")
+        if first is not None:
+            first_call_epoch = float(first) if first_call_epoch is None else min(first_call_epoch, float(first))
+        if last is not None:
+            last_call_epoch = float(last) if last_call_epoch is None else max(last_call_epoch, float(last))
+
     if profile == "redeclaration" and mode == "full":
         redeclare_at = int(spec.get("redeclare_at") or 15)
         added = spec.get("redeclare_tool") or "docs"
@@ -827,13 +882,20 @@ def run_cluster(
             pod=pod,
         )
         live_outcomes.extend(pre.get("outcomes") or [])
+        _note_calls(pre)
         termination = time.time()
         expanded = list(declared)
         if added not in expanded:
             expanded.append(added)
         declared = expanded
         declared_arg = ",".join(declared)
-        _apply_declaration(task_id, list(declared), granularity)
+        _apply_declaration(
+            task_id,
+            list(declared),
+            granularity,
+            expected_duration=expected_task_s,
+            expected_step_duration=expected_step_s,
+        )
         _wait_cnp(task_id)
         task_jwt = _mint_jwt_svid(spiffe, jwt_ttl)
         post = _exec_worker(
@@ -851,19 +913,16 @@ def run_cluster(
         steps_reexecuted = 0
         writes_committed = _writes_still_committed(out_dir, redeclare_at)
         live_outcomes.extend(post.get("outcomes") or [])
+        _note_calls(post)
         worker = {
             "start_epoch": float(pre.get("start_epoch") or task_start),
             "end_epoch": float(post.get("end_epoch") or time.time()),
         }
     elif granularity == "step" and mode == "full":
-        plan = build_step_plan(
-            seed,
-            declared=declared,
-            redeclare_at=spec.get("redeclare_at"),
-            redeclare_tool=spec.get("redeclare_tool") or "docs",
-        )
+        plan = plan_for_ttl
         payload = load_payload(spec.get("payload_version") or "v1", seed)
         last = None
+        record_split = True
         for step in plan:
             try:
                 tool = pick_tool(step.instruction, list(declared), last)
@@ -877,14 +936,32 @@ def run_cluster(
             svid_ms = (time.perf_counter() - s0) * 1000.0
             if task_jwt is None:
                 task_jwt = jwt
-            p0 = time.perf_counter()
+            declaration_update = tool in declared
             d_ms = 0.0
-            if tool in declared:
-                _apply_declaration(task_id, [tool], "step")
-                d_ms = _wait_cnp(task_id)
-            prop_ms = (time.perf_counter() - p0) * 1000.0
+            prop_ms = 0.0
+            declaration_updated_at = None
+            first_enforced_at = None
+            cnp_wait_started = None
+            cnp_valid_at = None
+            if declaration_update:
+                # CRD+CNP only. SPIRE mint and APISIX stay off this clock.
+                # d = cnp_wait_started → cnp_valid (controller p/q/d poll).
+                # propagation = declaration apply returned → first enforced
+                # (same CNP Valid observation as d's end).
+                _apply_declaration(
+                    task_id,
+                    [tool],
+                    "step",
+                    expected_duration=expected_task_s,
+                    expected_step_duration=expected_step_s,
+                    provision_identity=False,
+                )
+                declaration_updated_at = time.time()
+                d_ms, cnp_wait_started, cnp_valid_at = _wait_cnp_clock(task_id)
+                first_enforced_at = cnp_valid_at
+                prop_ms = (first_enforced_at - declaration_updated_at) * 1000.0
             probe_ms = 0.0
-            if step_split and probe_enabled:
+            if probe_enabled and (step_split or record_split):
                 pr0 = time.perf_counter()
                 rows, flows = cluster_probe(
                     mode, seed, pod, task_id, timeout=0.3, attempts=1
@@ -894,9 +971,11 @@ def run_cluster(
                 live_outcomes.append({"ok": True, "tool": tool, "probe_rows": rows})
                 del flows
                 probe_ms = (time.perf_counter() - pr0) * 1000.0
+            elif not probe_enabled:
+                probe_ms = 0.0
             boundary_ms = (time.perf_counter() - b0) * 1000.0
             other_ms = boundary_ms - svid_ms - prop_ms - probe_ms
-            if step_split:
+            if declaration_update:
                 step_boundaries.append(
                     {
                         "step": step.index,
@@ -905,6 +984,11 @@ def run_cluster(
                         "probe_ms": probe_ms,
                         "other_ms": other_ms,
                         "boundary_ms": boundary_ms,
+                        "d_ms": d_ms,
+                        "declaration_updated_at_epoch": declaration_updated_at,
+                        "first_enforced_at_epoch": first_enforced_at,
+                        "cnp_wait_started_epoch": cnp_wait_started,
+                        "cnp_valid_epoch": cnp_valid_at,
                     }
                 )
             step_start = time.time()
@@ -920,6 +1004,7 @@ def run_cluster(
                 pod=pod,
             )
             live_outcomes.extend(step_worker.get("outcomes") or [])
+            _note_calls(step_worker)
             step_end = time.time()
             tau_step = max(float(jwt["tau_seconds"]), 1e-6)
             t_step = max(step_end - step_start, 1e-6)
@@ -937,6 +1022,8 @@ def run_cluster(
                     "step_end_epoch": step_end,
                     "credential_kind": "jwt-svid",
                     "spire_entry": True,
+                    "ttl_requested_seconds": jwt.get("ttl_requested_seconds", jwt_requested),
+                    "ttl_granted_seconds": jwt.get("ttl_granted_seconds", jwt_ttl),
                 }
             )
             last = {"forced_tool": tool}
@@ -954,6 +1041,7 @@ def run_cluster(
             pod=pod,
         )
         live_outcomes.extend(worker.get("outcomes") or [])
+        _note_calls(worker)
     task_end = time.time()
     if uses_gateway_path(mode, gateway_bypass):
         _kubectl(
@@ -994,6 +1082,8 @@ def run_cluster(
                 task_id,
                 list(declared),
                 granularity,
+                expected_duration=expected_task_s,
+                expected_step_duration=expected_step_s,
                 gateway_bypass=gateway_bypass,
                 isolate=True,
             )
@@ -1006,7 +1096,13 @@ def run_cluster(
     else:
         probe_rows, flow_rows = cluster_probe(mode, seed, pod, task_id)
     if mode == "full" and granularity == "step" and probe_enabled:
-        _apply_declaration(task_id, list(declared), "task")
+        _apply_declaration(
+            task_id,
+            list(declared),
+            "task",
+            expected_duration=expected_task_s,
+            expected_step_duration=expected_step_s,
+        )
         _wait_cnp(task_id)
         probe_rows, flow_rows = cluster_probe(mode, seed, pod, task_id)
     if mode in ("flat", "full") and not gateway_bypass and not step_split and profile != "redeclaration":
@@ -1049,6 +1145,8 @@ def run_cluster(
                 "step_end_epoch": t_end,
                 "credential_kind": cred_kind,
                 "spire_entry": mode == "full",
+                "ttl_requested_seconds": 86400 if cred_kind == "sa-token" else jwt_requested,
+                "ttl_granted_seconds": 86400 if cred_kind == "sa-token" else int(round(not_after_epoch - issued_epoch)),
             }
         )
     pd.DataFrame(svid_rows).to_parquet(out_dir / "svid.parquet", index=False)
@@ -1089,6 +1187,8 @@ def run_cluster(
             task_id,
             list(declared),
             granularity,
+            expected_duration=expected_task_s,
+            expected_step_duration=expected_step_s,
             segment_enabled=uses_segment(mode, gateway_bypass),
         )
         time.sleep(2)
@@ -1166,6 +1266,10 @@ def run_cluster(
                 "spiffe_id": spiffe,
                 "granularity": granularity,
                 "services": list(declared),
+                "expected_duration_seconds": expected_task_s,
+                "expected_step_duration_seconds": expected_step_s,
+                "expected_task_duration_s": expected_task_s,
+                "expected_step_duration_s": expected_step_s,
                 **(
                     {"declared_count": len(declared), "variant": variant}
                     if variant
@@ -1189,7 +1293,14 @@ def run_cluster(
             "writes_committed_before_termination": writes_committed,
             "probe_enabled": probe_enabled,
             "step_boundaries": step_boundaries,
-            "step_split": step_split,
+            "step_split": bool(step_split or step_boundaries),
+            "first_call_epoch": first_call_epoch,
+            "last_call_epoch": last_call_epoch,
+            "jwt_ttl_requested_seconds": 86400 if uses_flat_credential(mode) else jwt_requested,
+            "jwt_ttl_granted_seconds": (
+                86400 if uses_flat_credential(mode)
+                else int(round(float((task_jwt or {}).get("tau_seconds") or jwt_ttl)))
+            ),
         },
         baseline_spans=baseline_spans,
     )

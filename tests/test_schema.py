@@ -73,6 +73,13 @@ def test_write_mix_one_is_accepted():
     assert errors == []
 
 
+def test_missing_expected_duration_fails_extra_schema():
+    doc = _load_yaml("long-multistep-full.yaml")
+    doc["spec"]["expected_duration_seconds"] = 0
+    errors = extra_errors(doc, load_inventory())
+    assert any("expected_duration_seconds" in e for e in errors)
+
+
 def test_missing_field_fails():
     doc = _load_yaml("long-multistep-full.yaml")
     del doc["spec"]["seed"]

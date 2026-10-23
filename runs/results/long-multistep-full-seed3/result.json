@@ -4,9 +4,9 @@
   "profile": "long-multistep",
   "mode": "full",
   "seed": 3,
-  "started_at": "2026-09-21T16:39:56.096300Z",
-  "finished_at": "2026-09-21T16:39:57.356086Z",
-  "wall_clock_seconds": 1.259786605834961,
+  "started_at": "2026-09-28T13:36:59.438683Z",
+  "finished_at": "2026-09-28T13:36:59.617955Z",
+  "wall_clock_seconds": 0.17927169799804688,
   "source": "cluster",
   "declaration": {
     "task_id": "long-multistep-full-seed3",
@@ -16,7 +16,10 @@
       "search",
       "notify"
     ],
-    "expected_duration_seconds": 1800,
+    "expected_duration_seconds": 23,
+    "expected_step_duration_seconds": 1,
+    "expected_task_duration_s": 23,
+    "expected_step_duration_s": 1,
     "granularity": "task"
   },
   "steps_completed": 30,
@@ -27,58 +30,98 @@
     "irreversible": 3
   },
   "metrics": {
-    "reachable_set_size": 3,
+    "reachable_set_size": 7,
     "reachable_services": [
+      "analytics",
+      "audit",
+      "billing",
+      "catalog",
       "notify",
       "records",
       "search"
     ],
-    "reachable_weight": 7,
-    "credential_ratio": 1.0732770919174268,
-    "tau_seconds": 1.3443551063537598,
-    "T_seconds": 1.252570390701294,
-    "tau_issued_epoch": 1790008796.0963,
-    "tau_not_after_epoch": 1790008797.440655,
-    "T_start_epoch": 1790008796.0963004,
-    "T_end_epoch": 1790008797.3488708,
+    "reachable_weight": 11,
+    "credential_ratio": 130.75630170092046,
+    "credential_ratio_derivation": {
+      "formula": "credential_ratio = tau_seconds / T_seconds",
+      "tau_definition": "jwt_ttl",
+      "tau_seconds": 23.0,
+      "T_seconds": 0.17589974403381348,
+      "credential_kind": "jwt-svid",
+      "T_definition": "first to last tool call"
+    },
+    "tau_seconds": 23.0,
+    "T_seconds": 0.17589974403381348,
+    "tau_issued_epoch": 1790602619.0,
+    "tau_not_after_epoch": 1790602642.0,
+    "T_start_epoch": 1790602619.4387476,
+    "T_end_epoch": 1790602619.6146474,
+    "residual_svid_seconds": 22.345242023468018,
+    "residual_policy_seconds": 0.1525568962097168,
+    "residual_credential_s": 22.345242023468018,
+    "residual_reach_ms": 152.5568962097168,
+    "entry_deleted_at_epoch": 1790602645.656969,
+    "policy_removed_at_epoch": 1790602619.8073149,
+    "task_end_epoch": 1790602619.654758,
+    "credential_kind": "jwt-svid",
+    "jwt_ttl_requested_seconds": 23,
+    "jwt_ttl_granted_seconds": 23,
     "rollback_completeness": {
       "idempotent": {
         "rho_rev": 1.0,
         "n": 11,
-        "restored": 11
+        "restored": 11,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
       },
       "versioned": {
         "rho_rev": 1.0,
         "n": 9,
-        "restored": 9
+        "restored": 9,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 0.0
       },
       "derived": {
         "rho_rev": null,
         "n": 6,
-        "quarantined": 6
+        "quarantined": 6,
+        "rho_enum": 1.0,
+        "rho_quarantined": 1.0,
+        "rho_escalated": 0.0
       },
       "irreversible": {
         "rho_rev": 0.0,
         "n": 3,
-        "escalated": 3
+        "escalated": 3,
+        "rho_enum": 1.0,
+        "rho_quarantined": 0.0,
+        "rho_escalated": 1.0
       }
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.0010887849999999999,
-      "relative": 5.151287545209517,
-      "verify_ms": 2.7578289999999996,
-      "total_ms": 1255.328121
+      "absolute_seconds": -0.0004757549999999997,
+      "relative": -0.13175813722311014,
+      "verify_ms": 1.193289,
+      "total_ms": 177.187039
     },
-    "segment_p_ms": 58.13908576965332,
-    "segment_q_ms": 411.5290641784668,
+    "segment_p_ms": 46.706199645996094,
+    "segment_q_ms": 152.5568962097168,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 58.13908576965332,
-    "d_ms_max": 58.13908576965332
+    "d_ms_mean": 46.706199645996094,
+    "d_ms_max": 46.706199645996094,
+    "breach_services": [
+      "docs"
+    ],
+    "breach_intersection": [],
+    "breach_intersection_size": 0,
+    "gateway_403": 2
   },
   "policy_propagation_ms": [
-    58.13908576965332
+    46.706199645996094
   ],
   "artefacts": {
     "probe": "probe.parquet",
@@ -87,39 +130,40 @@
     "lineage": "lineage.parquet",
     "groundtruth": "groundtruth.parquet",
     "svid": "svid.parquet",
-    "evasion": "evasion.parquet"
+    "evasion": "evasion.parquet",
+    "gateway": "gateway.parquet"
   },
   "evasion_matrix": [
     {
       "row": 1,
       "probe": "direct_ip_declared",
-      "target": "10.42.0.48:8081 (records pod)",
+      "target": "10.42.0.184:8081 (records pod)",
       "verdict": "allowed",
-      "latency_ms": 0.49062498146668077,
+      "latency_ms": 0.26470900047570467,
       "detail": "bypass Service name; connect to pod IP of records"
     },
     {
       "row": 2,
       "probe": "direct_ip_undeclared",
-      "target": "10.42.0.106:8082 (docs pod)",
-      "verdict": "refused",
-      "latency_ms": 2003.7027510115877,
+      "target": "10.42.0.105:8082 (docs pod)",
+      "verdict": "allowed",
+      "latency_ms": 0.22237497614696622,
       "detail": "pod IP of undeclared docs"
     },
     {
       "row": 3,
       "probe": "dns",
       "target": "docs.rig.svc.cluster.local; udp/53@1.1.1.1",
-      "verdict": "refused",
-      "latency_ms": 2401.6334589687176,
-      "detail": "coredns_undeclared=refused ips=[]; udp53_1.1.1.1=refused"
+      "verdict": "allowed",
+      "latency_ms": 17.863082990515977,
+      "detail": "coredns_undeclared=allowed ips=['10.43.139.158']; udp53_1.1.1.1=allowed"
     },
     {
       "row": 4,
       "probe": "external_https",
       "target": "1.1.1.1:443",
-      "verdict": "refused",
-      "latency_ms": 2381.3383760279976,
+      "verdict": "allowed",
+      "latency_ms": 16.336124972440302,
       "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443"
     },
     {
@@ -127,24 +171,26 @@
       "probe": "node_metadata",
       "target": "169.254.169.254:80",
       "verdict": "refused",
-      "latency_ms": 2044.1070420201868,
+      "latency_ms": 2004.0644180262461,
       "detail": "link-local cloud metadata; k3d has no IMDS"
     },
     {
       "row": 6,
       "probe": "kubernetes_api",
       "target": "kubernetes.default.svc:443+10.43.0.1",
-      "verdict": "refused",
-      "latency_ms": 2018.3481679996476,
-      "detail": "dns=error; tcp_name=skipped; tcp_clusterip=refused"
+      "verdict": "allowed",
+      "latency_ms": 3.958499990403652,
+      "detail": "dns=allowed; tcp_name=allowed; tcp_clusterip=allowed"
     },
     {
       "row": 7,
       "probe": "kubelet",
       "target": "172.18.0.3:10250",
-      "verdict": "refused",
-      "latency_ms": 2012.5459600239992,
+      "verdict": "allowed",
+      "latency_ms": 0.35620899870991707,
       "detail": "node InternalIP kubelet"
     }
-  ]
+  ],
+  "jwt_ttl_requested_seconds": 23,
+  "jwt_ttl_granted_seconds": 23
 }

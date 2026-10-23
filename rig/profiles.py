@@ -30,7 +30,6 @@ PROFILES: dict[str, dict[str, Any]] = {
         "injection_store": "minio",
         "payload_version": "v1",
         "three_store": False,
-        "expected_duration_seconds": 1800,
     },
     "data-intensive": {
         "steps": 20,
@@ -46,7 +45,6 @@ PROFILES: dict[str, dict[str, Any]] = {
         "injection_store": "minio",
         "payload_version": "v-data",
         "three_store": True,
-        "expected_duration_seconds": 1800,
     },
     # Legitimate undeclared tool at step 15 (not drift). Orchestrator
     # terminates, re-declares with the tool added, and resumes.
@@ -64,7 +62,6 @@ PROFILES: dict[str, dict[str, Any]] = {
         "injection_store": "minio",
         "payload_version": "v1",
         "three_store": False,
-        "expected_duration_seconds": 1800,
         "injection_enabled": False,
         "redeclare_at": 15,
         "redeclare_tool": "docs",
@@ -80,6 +77,26 @@ def profile_spec(name: str) -> dict[str, Any]:
     declared = list(spec["declared"])
     spec["declared"] = declared
     spec["undeclared"] = [n for n in INVENTORY if n not in declared]
+    try:
+        from agent.duration_policy import durations_for_plan
+        from plan import build_step_plan
+    except ImportError:
+        return spec
+
+    plan = build_step_plan(
+        seed=1,
+        steps=int(spec["steps"]),
+        write_mix=spec["write_mix"],
+        declared=declared,
+        three_store=bool(spec.get("three_store")),
+        redeclare_at=spec.get("redeclare_at"),
+        redeclare_tool=spec.get("redeclare_tool") or "docs",
+    )
+    durs = durations_for_plan(plan)
+    spec["expected_duration_seconds"] = int(durs["expected_task_duration_s"])
+    spec["expected_step_duration_seconds"] = int(durs["expected_step_duration_s"])
+    spec["expected_task_duration_s"] = int(durs["expected_task_duration_s"])
+    spec["expected_step_duration_s"] = int(durs["expected_step_duration_s"])
     return spec
 
 

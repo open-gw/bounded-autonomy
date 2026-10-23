@@ -87,6 +87,30 @@ def test_resume_retries_simulator_or_bad_provenance(tmp_path: Path):
     assert is_complete(run) is False
 
 
+def test_resume_retries_superseded(tmp_path: Path):
+    import pandas as pd
+
+    run = tmp_path / "long-multistep-full-seed1"
+    run.mkdir()
+    (run / "result.json").write_text(
+        json.dumps(
+            {
+                "run_id": "long-multistep-full-seed1",
+                "source": "cluster",
+                "mode": "full",
+                "seed": 1,
+                "steps_completed": 30,
+                "superseded_by": "task31",
+                "declaration": {"granularity": "task", "services": ["records", "search", "notify"]},
+            }
+        )
+    )
+    pd.DataFrame(
+        [{"name": "verify", "duration_ms": float(i + 1)} for i in range(29)]
+    ).to_parquet(run / "spans.parquet", index=False)
+    assert is_complete(run) is False
+
+
 def test_parse_rejects_empty_and_unknown():
     with pytest.raises(ValueError):
         parse_seeds("")
