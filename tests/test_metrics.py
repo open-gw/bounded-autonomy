@@ -220,10 +220,64 @@ def test_step_cost_split_reconciles_within_five_percent():
     got = step_cost_split(boundaries, probe_enabled=False)
     assert got["reconcile_ok"] is True
     assert got["reconcile_error_pct"] <= 5.0
+    assert all(b["reconcile_ok"] for b in got["boundaries"])
     assert got["totals"]["boundary_ms"] == 60.0
     assert got["totals"]["propagation_ms"] + got["totals"]["svid_reissue_ms"] + got[
         "totals"
     ]["probe_ms"] + got["totals"]["other_ms"] == pytest.approx(60.0)
+
+
+def test_step_cost_split_fails_when_a_boundary_misses_five_percent():
+    got = step_cost_split(
+        [
+            {
+                "step": 1,
+                "propagation_ms": 10.0,
+                "svid_reissue_ms": 8.0,
+                "probe_ms": 20.0,
+                "other_ms": 2.0,
+                "boundary_ms": 40.0,
+            },
+            {
+                "step": 2,
+                "propagation_ms": 10.0,
+                "svid_reissue_ms": 8.0,
+                "probe_ms": 20.0,
+                "other_ms": 2.0,
+                "boundary_ms": 100.0,
+            },
+        ],
+        probe_enabled=True,
+    )
+    assert got["reconcile_ok"] is False
+    assert got["boundaries"][1]["reconcile_ok"] is False
+
+
+def test_step_cost_split_keeps_d_and_propagation_clocks():
+    got = step_cost_split(
+        [
+            {
+                "step": 1,
+                "propagation_ms": 12.0,
+                "svid_reissue_ms": 8.0,
+                "probe_ms": 20.0,
+                "other_ms": 5.0,
+                "boundary_ms": 45.0,
+                "d_ms": 4.0,
+                "declaration_updated_at_epoch": 100.0,
+                "first_enforced_at_epoch": 100.012,
+                "cnp_wait_started_epoch": 100.008,
+                "cnp_valid_epoch": 100.012,
+            }
+        ],
+        probe_enabled=True,
+    )
+    row = got["boundaries"][0]
+    assert row["d_ms"] == 4.0
+    assert row["propagation_ms"] == 12.0
+    assert row["cnp_wait_started_epoch"] == 100.008
+    assert row["cnp_valid_epoch"] == row["first_enforced_at_epoch"] == 100.012
+    assert row["reconcile_ok"] is True
 
 
 def test_verify_duration_variance_detects_constants():

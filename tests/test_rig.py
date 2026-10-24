@@ -219,13 +219,17 @@ def test_local_full_tau_is_ttl_not_issue_to_delete(tmp_path: Path):
     result = run_local(mode="full", seed=1, out_dir=tmp_path / "full", injection=False)
     metrics = result["metrics"]
     assert metrics["credential_kind"] == "jwt-svid"
-    assert metrics["tau_seconds"] == pytest.approx(1800.0)
+    from profiles import profile_spec
+
+    ttl = float(profile_spec("long-multistep")["expected_duration_seconds"])
+    assert metrics["tau_seconds"] == pytest.approx(ttl)
     assert metrics["T_seconds"] is not None and metrics["T_seconds"] < 60
-    assert metrics["credential_ratio"] == pytest.approx(1800.0 / metrics["T_seconds"])
+    assert metrics["credential_ratio"] == pytest.approx(ttl / metrics["T_seconds"])
     assert metrics["residual_svid_seconds"] is not None
-    assert metrics["residual_svid_seconds"] > 1700
+    assert metrics["residual_credential_s"] == pytest.approx(metrics["residual_svid_seconds"])
+    assert metrics["residual_svid_seconds"] > ttl - 60
     assert metrics["residual_policy_seconds"] is not None
-    assert "exp - iat" in metrics["credential_ratio_derivation"]["tau_definition"]
+    assert metrics["credential_ratio_derivation"]["tau_definition"] == "jwt_ttl"
 
 
 def test_result_schema_on_local_run(tmp_path: Path):

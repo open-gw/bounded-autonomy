@@ -266,7 +266,8 @@ def run_local(
             steps_completed += 1
             probe(step.index)
             if step_split or granularity == "step":
-                prop = 12.0 + (step.index % 3)
+                d_ms = 4.0 + (step.index % 3)
+                prop = d_ms + 8.0
                 svid = 8.0 + (step.index % 2)
                 probe_ms = 20.0 if probe_enabled else 0.0
                 other = 3.0
@@ -278,6 +279,11 @@ def run_local(
                         "probe_ms": probe_ms,
                         "other_ms": other,
                         "boundary_ms": prop + svid + probe_ms + other,
+                        "d_ms": d_ms,
+                        "declaration_updated_at_epoch": 1_700_000_000.0 + step.index,
+                        "first_enforced_at_epoch": 1_700_000_000.0 + step.index + prop / 1000.0,
+                        "cnp_wait_started_epoch": 1_700_000_000.0 + step.index + 0.008,
+                        "cnp_valid_epoch": 1_700_000_000.0 + step.index + prop / 1000.0,
                     }
                 )
             continue
@@ -383,7 +389,8 @@ def run_local(
         steps_completed += 1
         probe(step.index)
         if step_split or granularity == "step":
-            prop = 12.0 + (step.index % 3)
+            d_ms = 4.0 + (step.index % 3)
+            prop = d_ms + 8.0
             svid = 8.0 + (step.index % 2)
             probe_ms = 20.0 if probe_enabled else 0.0
             other = 3.0
@@ -396,6 +403,11 @@ def run_local(
                     "probe_ms": probe_ms,
                     "other_ms": other,
                     "boundary_ms": boundary,
+                    "d_ms": d_ms,
+                    "declaration_updated_at_epoch": 1_700_000_000.0 + step.index,
+                    "first_enforced_at_epoch": 1_700_000_000.0 + step.index + prop / 1000.0,
+                    "cnp_wait_started_epoch": 1_700_000_000.0 + step.index + 0.008,
+                    "cnp_valid_epoch": 1_700_000_000.0 + step.index + prop / 1000.0,
                 }
             )
 
@@ -420,8 +432,15 @@ def run_local(
     if uses_flat_credential(mode):
         tau_not_after = t_start + 86400.0
         cred_kind = "sa-token"
+        ttl = 86400.0
     else:
-        ttl = 60.0 if granularity == "step" else 1800.0
+        ttl = float(
+            spec.get("expected_step_duration_seconds")
+            if granularity == "step"
+            else spec.get("expected_duration_seconds")
+        )
+        if not ttl:
+            raise ValueError("declaration lacks expected duration")
         tau_not_after = t_start + ttl
         cred_kind = "jwt-svid"
     segment = uses_segment(mode, gateway_bypass)
@@ -484,7 +503,10 @@ def run_local(
                 "task_id": task_id,
                 "spiffe_id": spiffe,
                 "services": declared,
-                "expected_duration_seconds": 1800,
+                "expected_duration_seconds": int(spec["expected_duration_seconds"]),
+                "expected_step_duration_seconds": int(spec.get("expected_step_duration_seconds") or spec["expected_duration_seconds"]),
+                "expected_task_duration_s": int(spec["expected_duration_seconds"]),
+                "expected_step_duration_s": int(spec.get("expected_step_duration_seconds") or spec["expected_duration_seconds"]),
                 "granularity": granularity,
                 **({"declared_count": len(declared), "variant": variant} if variant else {}),
             },
@@ -507,6 +529,10 @@ def run_local(
             "writes_committed_before_termination": writes_committed_before_termination,
             "probe_enabled": probe_enabled,
             "step_boundaries": step_boundaries if (step_split or step_boundaries) else [],
+            "jwt_ttl_requested_seconds": int(ttl) if not uses_flat_credential(mode) else 86400,
+            "jwt_ttl_granted_seconds": int(ttl) if not uses_flat_credential(mode) else 86400,
+            "first_call_epoch": t_start,
+            "last_call_epoch": t_end,
         },
         baseline_spans=baseline_spans,
     )

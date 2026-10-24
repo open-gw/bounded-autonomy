@@ -15,27 +15,31 @@ from typing import Any
 # Server ``default_x509_svid_ttl`` is 1h. Task identity is a JWT-SVID; X.509
 # stays at this pod-level default and is never used as τ.
 POD_X509_SVID_TTL_SECONDS = 3600
-DEFAULT_TASK_JWT_TTL_SECONDS = 1800
-DEFAULT_STEP_JWT_TTL_SECONDS = 60
 JWT_AUDIENCE = "rig"
 POD_SPIFFE_ID = "spiffe://rig/workload/agent"
+TAU_DEFINITION_JWT_TTL = "jwt_ttl"
 
 
 def jwt_ttl_seconds(spec: dict[str, Any], *, granularity: str | None = None) -> int:
+    """TTL from the declaration. No 1800 s / 60 s fallback."""
     gran = granularity or spec.get("granularity") or "task"
     if gran == "step":
         step = (
             spec.get("expectedStepDurationSeconds")
             or spec.get("expected_step_duration_seconds")
         )
-        if step:
-            return int(step)
-        return DEFAULT_STEP_JWT_TTL_SECONDS
-    return int(
+        if not step:
+            raise ValueError("declaration lacks expected_step_duration_seconds")
+        return int(step)
+    task = (
         spec.get("expectedDurationSeconds")
         or spec.get("expected_duration_seconds")
-        or DEFAULT_TASK_JWT_TTL_SECONDS
+        or spec.get("expected_task_duration_s")
+        or spec.get("expected_task_duration_seconds")
     )
+    if not task:
+        raise ValueError("declaration lacks expected_duration_seconds")
+    return int(task)
 
 
 def decode_jwt_claims(token: str) -> dict[str, Any]:
@@ -61,11 +65,15 @@ def residual_seconds(*, exp: float, task_end: float, policy_removed_at: float | 
     (a) exp − task_end: JWT-SVID still valid after the run.
     (b) policy_removed_at − task_end: CNP/segment collapse (historically ~363 ms).
     """
+    residual_svid = float(exp) - float(task_end)
+    residual_policy = (
+        None if policy_removed_at is None else float(policy_removed_at) - float(task_end)
+    )
     return {
-        "residual_svid_seconds": float(exp) - float(task_end),
-        "residual_policy_seconds": (
-            None if policy_removed_at is None else float(policy_removed_at) - float(task_end)
-        ),
+        "residual_svid_seconds": residual_svid,
+        "residual_policy_seconds": residual_policy,
+        "residual_credential_s": residual_svid,
+        "residual_reach_ms": None if residual_policy is None else residual_policy * 1000.0,
     }
 
 
