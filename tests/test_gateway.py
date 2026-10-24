@@ -115,6 +115,7 @@ def test_simulator_gateway_only_403(tmp_path: Path):
     assert not docs.empty
     assert int(docs["status"].iloc[0]) == 403
     assert result["artefacts"].get("gateway") == "gateway.parquet"
+    assert int(result["metrics"].get("gateway_403") or 0) >= 1
 
 
 def test_simulator_gateway_bypass_breach(tmp_path: Path):

@@ -165,48 +165,101 @@ def _evasion_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _evasion_consensus(results: list[dict[str, Any]], mode: str, row: int) -> str:
-    verdicts = []
+def _evasion_cell(results: list[dict[str, Any]], mode: str, row: int) -> str:
+    """Consensus cell. Unanimous → ``verdict (n/n)``; mixed → counts, never 5/10."""
+    items: list[tuple[str, str]] = []
     for r in results:
         if r.get("mode") != mode:
             continue
         for item in r.get("evasion_matrix") or []:
             if int(item.get("row") or 0) == row:
-                verdicts.append(str(item.get("verdict") or "error"))
-    if not verdicts:
+                items.append(
+                    (str(item.get("verdict") or "error"), str(item.get("leak") or ""))
+                )
+    if not items:
         return _EMDASH
     counts: dict[str, int] = {}
-    for v in verdicts:
-        counts[v] = counts.get(v, 0) + 1
-    top = max(counts.items(), key=lambda kv: (kv[1], kv[0]))
-    return f"{top[0]} ({top[1]}/{len(verdicts)})"
+    for verdict, _leak in items:
+        counts[verdict] = counts.get(verdict, 0) + 1
+    n = len(items)
+    if len(counts) == 1:
+        verdict = next(iter(counts))
+        leaks = {leak for _v, leak in items if leak}
+        leak_tag = ""
+        if leaks == {"name-resolution"}:
+            leak_tag = "name-res. leak, "
+        elif leaks == {"reach"}:
+            leak_tag = "reach leak, "
+        return f"{verdict} ({leak_tag}{n}/{n})"
+    parts = [f"{verdict} {count}" for verdict, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return ", ".join(parts)
 
 
 _EVASION_LABELS = (
-    (1, "direct-IP declared service pod"),
-    (2, "direct-IP undeclared service pod"),
-    (3, "DNS undeclared via CoreDNS + raw UDP/53 to 1.1.1.1"),
-    (4, "external TCP/443 to 1.1.1.1"),
-    (5, "node metadata 169.254.169.254:80"),
-    (6, "kubernetes.default.svc:443 and ClusterIP"),
-    (7, "node IP kubelet :10250"),
+    (1, "1", "direct-IP declared service pod"),
+    (2, "2", "direct-IP undeclared service pod"),
+    (3, "3a", "CoreDNS undeclared name (docs.rig.svc.cluster.local)"),
+    (4, "3b", "raw UDP/53 to 1.1.1.1"),
+    (5, "4", "external TCP/443 to 1.1.1.1"),
+    (6, "5", "node metadata 169.254.169.254:80"),
+    (7, "6a", "kubernetes.default.svc:443 (name)"),
+    (8, "6b", "kubernetes ClusterIP:443"),
+    (9, "7", "node IP kubelet :10250"),
 )
+_EVASION_SPLIT_ROWS = (3, 4, 7, 8)
 
 
 def _evasion_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     results = _evasion_results(results)
     rows: list[tuple[str, ...]] = []
-    for spec in ({"row": n, "label": label} for n, label in _EVASION_LABELS):
-        n = int(spec["row"])
+    for n, display, label in _EVASION_LABELS:
         rows.append(
             (
-                str(n),
-                str(spec["label"]),
-                _evasion_consensus(results, "flat", n),
-                _evasion_consensus(results, "full", n),
+                display,
+                label,
+                _evasion_cell(results, "flat", n),
+                _evasion_cell(results, "full", n),
             )
         )
     return rows
+
+
+def _fmt_epoch(value: Any) -> str:
+    if value is None or value == "":
+        return _EMDASH
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return _EMDASH
+
+
+def _evasion_seed_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
+    """Per-seed split-probe verdicts with policy-propagation timestamps."""
+    display = {n: disp for n, disp, _label in _EVASION_LABELS}
+    out: list[tuple[str, ...]] = []
+    for r in sorted(
+        _evasion_results(results),
+        key=lambda x: (str(x.get("mode") or ""), int(x.get("seed") or 0)),
+    ):
+        matrix = {int(item.get("row") or 0): item for item in (r.get("evasion_matrix") or [])}
+        for row in _EVASION_SPLIT_ROWS:
+            item = matrix.get(row)
+            if not item:
+                continue
+            leak = str(item.get("leak") or "")
+            out.append(
+                (
+                    str(r.get("mode") or ""),
+                    str(r.get("seed") or ""),
+                    display.get(row, str(row)),
+                    str(item.get("verdict") or "error"),
+                    leak or _EMDASH,
+                    _fmt_epoch(item.get("policy_propagation_ms")),
+                    _fmt_epoch(item.get("seconds_after_cnp_valid")),
+                    _fmt_epoch(item.get("probe_epoch")),
+                )
+            )
+    return out
 
 
 def table_evasion(results: list[dict[str, Any]]) -> str:
@@ -219,32 +272,66 @@ def table_evasion(results: list[dict[str, Any]]) -> str:
 
 def emit_evasion_markdown(results: list[dict[str, Any]]) -> str:
     gated = _evasion_results(results)
+    seed_rows = _evasion_seed_rows(results)
     parts = [
-        "# Evasion matrix (Task 23)",
+        "# Evasion matrix (Task 32 split of Task 23 rows 3 and 6)",
         "",
         source_caption(gated, "Evasion"),
         "",
         table_evasion(results),
         "",
         "DNS is restricted to CoreDNS for declared names only. External "
-        "resolver and TCP/443 target is Cloudflare `1.1.1.1`.",
+        "resolver and TCP/443 target is Cloudflare `1.1.1.1`. Rows 3a/3b "
+        "and 6a/6b are the former bundled probes; mixed cells list counts "
+        "and never collapse to 5/10. A CoreDNS or API-name success under "
+        "full is a name-resolution leak, not reach.",
         "",
     ]
+    if seed_rows:
+        parts.extend(
+            [
+                "## Split probes per seed",
+                "",
+                source_caption(gated, "Evasion per-seed"),
+                "",
+                _md_lines(
+                    "| mode | seed | row | verdict | leak | cnp_valid_ms | seconds after Valid | probe_epoch |",
+                    "| --- | ---: | --- | --- | --- | ---: | ---: | ---: |",
+                    seed_rows,
+                ),
+                "",
+            ]
+        )
     return "\n".join(parts)
 
 
 def emit_evasion_latex(results: list[dict[str, Any]]) -> str:
     gated = _evasion_results(results)
-    return (
+    parts = [
         _tex_tabular(
             gated,
             "Evasion",
             "rlll",
             r"row & probe & flat & full",
             _evasion_rows(results),
+        ),
+        "",
+    ]
+    seed_rows = _evasion_seed_rows(results)
+    if seed_rows:
+        parts.extend(
+            [
+                _tex_tabular(
+                    gated,
+                    "Evasion per-seed",
+                    "lrlrrrrr",
+                    r"mode & seed & row & verdict & leak & cnp Valid (ms) & s after Valid & probe epoch",
+                    seed_rows,
+                ),
+                "",
+            ]
         )
-        + "\n"
-    )
+    return "\n".join(parts)
 
 
 def _b_intersect_r(row: dict[str, Any]) -> int:
@@ -268,6 +355,24 @@ def _gateway_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in results if _is_gateway(r)]
 
 
+def count_gateway_403(frame: pd.DataFrame) -> int:
+    if frame is None or frame.empty or "status" not in frame.columns:
+        return 0
+    return int((pd.to_numeric(frame["status"], errors="coerce") == 403).sum())
+
+
+def _gateway_403(row: dict[str, Any]) -> int:
+    metrics = row.get("metrics") or {}
+    if "gateway_403" in metrics and metrics.get("gateway_403") is not None:
+        return int(metrics["gateway_403"])
+    path = row.get("_path")
+    if path:
+        parquet = Path(path).parent / "gateway.parquet"
+        if parquet.exists():
+            return count_gateway_403(pd.read_parquet(parquet))
+    return 0
+
+
 def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
     rows: list[tuple[str, ...]] = []
     for row in sorted(
@@ -281,6 +386,7 @@ def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
                 str(row.get("seed") or ""),
                 str(metrics.get("reachable_set_size") or 0),
                 str(_b_intersect_r(row)),
+                str(_gateway_403(row)),
                 str(row.get("source") or ""),
             )
         )
@@ -289,8 +395,8 @@ def _gateway_rows(results: list[dict[str, Any]]) -> list[tuple[str, ...]]:
 
 def table_gateway(results: list[dict[str, Any]]) -> str:
     return _md_lines(
-        "| mode | seed | \\|S\\| | \\|B ∩ R\\| | source |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| mode | seed | \\|S\\| | \\|B ∩ R\\| | gateway_403 | source |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
         _gateway_rows(results),
     )
 
@@ -342,7 +448,9 @@ def emit_gateway_markdown(results: list[dict[str, Any]]) -> str:
         "",
         table_gateway_dispersion(results),
         "",
-        "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong.",
+        "Product is Apache APISIX. Plugin is `uri-blocker`. Not Kong. "
+        "`gateway_403` is the count of HTTP 403 rows in `gateway.parquet` "
+        "(uri-blocker rejections of undeclared paths).",
         "",
     ]
     return "\n".join(parts)
@@ -354,8 +462,8 @@ def emit_gateway_latex(results: list[dict[str, Any]]) -> str:
         _tex_tabular(
             gated,
             "Gateway",
-            "lrrrl",
-            r"mode & seed & $|S|$ & $|B \cap R|$ & source",
+            "lrrrrl",
+            r"mode & seed & $|S|$ & $|B \cap R|$ & gateway\_403 & source",
             _gateway_rows(results),
         )
         + "\n\n"
@@ -1478,6 +1586,7 @@ def emit_latex(results: list[dict[str, Any]]) -> str:
         "% Manuscript tables (LaTeX-ready rows from make paper-tables)",
         f"% {source_caption(task, 'all tables').strip('*')}",
         "% Paste into Paper 1 tabulars. Simulator/fixture numbers must not be used.",
+        "% Each caption n is that table's selector, never the whole results tree.",
         "",
         _tex_tabular(
             task,

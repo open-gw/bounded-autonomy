@@ -4,9 +4,9 @@
   "profile": "redeclaration",
   "mode": "full",
   "seed": 3,
-  "started_at": "2026-09-28T05:18:50.666298Z",
-  "finished_at": "2026-09-28T05:19:54.581734Z",
-  "wall_clock_seconds": 63.91543650627136,
+  "started_at": "2026-09-28T15:23:28.215813Z",
+  "finished_at": "2026-09-28T15:23:30.458991Z",
+  "wall_clock_seconds": 2.243178129196167,
   "source": "cluster",
   "declaration": {
     "task_id": "redeclaration-full-seed3",
@@ -28,35 +28,33 @@
     "irreversible": 3
   },
   "metrics": {
-    "reachable_set_size": 6,
+    "reachable_set_size": 4,
     "reachable_services": [
-      "audit",
-      "catalog",
       "docs",
       "notify",
       "records",
       "search"
     ],
-    "reachable_weight": 12,
-    "credential_ratio": 28.175675193793467,
+    "reachable_weight": 10,
+    "credential_ratio": 803.5464512763672,
     "credential_ratio_derivation": {
       "formula": "credential_ratio = tau_seconds / T_seconds",
       "tau_definition": "exp - iat (SVID TTL); not issue-to-delete; not registration-entry deletion",
       "tau_seconds": 1800.0,
-      "T_seconds": 63.88489317893982,
+      "T_seconds": 2.240069627761841,
       "credential_kind": "jwt-svid"
     },
     "tau_seconds": 1800.0,
-    "T_seconds": 63.88489317893982,
-    "tau_issued_epoch": 1790572786.0,
-    "tau_not_after_epoch": 1790574586.0,
-    "T_start_epoch": 1790572730.6662986,
-    "T_end_epoch": 1790572794.5511918,
-    "residual_svid_seconds": 1791.2276129722595,
-    "residual_policy_seconds": 1.8493661880493164,
-    "entry_deleted_at_epoch": 1790572840.43597,
-    "policy_removed_at_epoch": 1790572796.6217532,
-    "task_end_epoch": 1790572794.772387,
+    "T_seconds": 2.240069627761841,
+    "tau_issued_epoch": 1790609009.0,
+    "tau_not_after_epoch": 1790610809.0,
+    "T_start_epoch": 1790609008.2158134,
+    "T_end_epoch": 1790609010.455883,
+    "residual_svid_seconds": 1798.4654772281647,
+    "residual_policy_seconds": 1.696376085281372,
+    "entry_deleted_at_epoch": 1790609070.8167748,
+    "policy_removed_at_epoch": 1790609012.2308989,
+    "task_end_epoch": 1790609010.5345228,
     "credential_kind": "jwt-svid",
     "rollback_completeness": {
       "idempotent": {
@@ -94,17 +92,17 @@
     },
     "rho_enum": 1.0,
     "verification_overhead": {
-      "absolute_seconds": 0.008755878,
+      "absolute_seconds": 0.0058487090000000005,
       "relative": null,
-      "verify_ms": 8.755878,
-      "total_ms": 1197.568129
+      "verify_ms": 5.848709,
+      "total_ms": 812.747876
     },
-    "segment_p_ms": 74.18203353881836,
-    "segment_q_ms": 1849.3661880493164,
+    "segment_p_ms": 52.84881591796875,
+    "segment_q_ms": 1696.376085281372,
     "step_ratio_mean": null,
     "step_ratio_max": null,
-    "d_ms_mean": 74.18203353881836,
-    "d_ms_max": 74.18203353881836,
+    "d_ms_mean": 52.84881591796875,
+    "d_ms_max": 52.84881591796875,
     "breach_services": [
       "docs"
     ],
@@ -114,7 +112,7 @@
     "breach_intersection_size": 1
   },
   "policy_propagation_ms": [
-    74.18203353881836
+    52.84881591796875
   ],
   "artefacts": {
     "probe": "probe.parquet",
@@ -125,7 +123,7 @@
     "svid": "svid.parquet",
     "gateway": "gateway.parquet"
   },
-  "redeclaration_cost_ms": 62599.24006462097,
+  "redeclaration_cost_ms": 1374.20654296875,
   "steps_reexecuted": 0,
   "writes_committed_before_termination": true
 }

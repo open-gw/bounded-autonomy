@@ -1,9 +1,15 @@
-"""Evasion matrix: seven probes from the task identity (agent pod).
+"""Evasion matrix: nine probes from the task identity (agent pod).
 
-Each row records allowed | refused | error | host-refused and latency.
-Public targets are documented constants (not secrets): Cloudflare 1.1.1.1
-for external DNS UDP/53 and TCP/443; link-local 169.254.169.254:80 for
-node metadata. See docs/findings/23-evasion.md.
+Task 23 bundled row 3 (CoreDNS undeclared + raw UDP/53) and row 6
+(API name + ClusterIP). Task 32 splits each into two sub-probes so a
+mixed 5/10 cell cannot hide which path ran. Display ids stay 3a/3b and
+6a/6b; integer ``row`` is 1–9 for the schema.
+
+Each row records allowed | refused | error | host-refused, latency, and
+optional policy-propagation timestamps. Public targets are documented
+constants (not secrets): Cloudflare 1.1.1.1 for external DNS UDP/53 and
+TCP/443; link-local 169.254.169.254:80 for node metadata.
+See docs/findings/23-evasion.md and docs/findings/32-evasion-gateway.md.
 """
 
 from __future__ import annotations
@@ -28,44 +34,68 @@ KUBERNETES_DNS = "kubernetes.default.svc"
 UNDECLARED_DNS = "docs.rig.svc.cluster.local"
 
 VERDICTS = ("allowed", "refused", "error", "host-refused")
+MATRIX_ROWS = 9
 
 PROBE_SPECS: tuple[dict[str, Any], ...] = (
     {
         "row": 1,
+        "id": "1",
         "probe": "direct_ip_declared",
         "label": "direct-IP declared service pod",
     },
     {
         "row": 2,
+        "id": "2",
         "probe": "direct_ip_undeclared",
         "label": "direct-IP undeclared service pod",
     },
     {
         "row": 3,
-        "probe": "dns",
-        "label": "DNS undeclared via CoreDNS + raw UDP/53 to 1.1.1.1",
+        "id": "3a",
+        "probe": "dns_coredns_undeclared",
+        "label": "CoreDNS undeclared name (docs.rig.svc.cluster.local)",
     },
     {
         "row": 4,
+        "id": "3b",
+        "probe": "dns_udp53_external",
+        "label": "raw UDP/53 to 1.1.1.1",
+    },
+    {
+        "row": 5,
+        "id": "4",
         "probe": "external_https",
         "label": "external TCP/443 to 1.1.1.1",
     },
     {
-        "row": 5,
+        "row": 6,
+        "id": "5",
         "probe": "node_metadata",
         "label": "node metadata 169.254.169.254:80",
     },
     {
-        "row": 6,
-        "probe": "kubernetes_api",
-        "label": "kubernetes.default.svc:443 and ClusterIP",
+        "row": 7,
+        "id": "6a",
+        "probe": "kubernetes_api_name",
+        "label": "kubernetes.default.svc:443 (name)",
     },
     {
-        "row": 7,
+        "row": 8,
+        "id": "6b",
+        "probe": "kubernetes_api_ip",
+        "label": "kubernetes ClusterIP:443",
+    },
+    {
+        "row": 9,
+        "id": "7",
         "probe": "kubelet",
         "label": "node IP kubelet :10250",
     },
 )
+
+# Flat host-refused on timeout: external HTTPS and IMDS (display rows 4 and 5).
+_FLAT_HOST_TIMEOUT_ROWS = {5, 6}
+_DNS_LOOKUP_ROWS = {3, 7}
 
 _HOST_ERRNOS = {
     errno.ECONNREFUSED,
@@ -81,6 +111,15 @@ for _name in ("EAI_NONAME", "EAI_AGAIN", "EAI_FAIL", "EAI_NODATA", "EAI_SERVICE"
     if hasattr(socket, _name):
         _DNS_REFUSE_ERRNOS.add(int(getattr(socket, _name)))
 
+_OPTIONAL_FIELDS = (
+    "id",
+    "leak",
+    "policy_propagation_ms",
+    "probe_epoch",
+    "cnp_valid_epoch",
+    "seconds_after_cnp_valid",
+)
+
 
 def classify_verdict(
     *,
@@ -92,18 +131,19 @@ def classify_verdict(
 ) -> str:
     """Map a probe outcome to allowed | refused | error | host-refused.
 
-    Flat has no CNP, so a timeout on rows 4–5 is the host (no IMDS, no
-    route), not a policy drop. Full treats timeout as refused.
+    Flat has no CNP, so a timeout on display rows 4–5 (integer 5–6) is the
+    host (no IMDS, no route), not a policy drop. Full treats timeout as
+    refused. DNS lookup failures use the resolver errno set.
     """
     if ok:
         return "allowed"
     code = int(err or 0)
     if code in _HOST_ERRNOS:
         return "host-refused"
-    if row == 3 and code in _DNS_REFUSE_ERRNOS:
+    if row in _DNS_LOOKUP_ROWS and code in _DNS_REFUSE_ERRNOS:
         return "refused"
     if timed_out or code in {errno.ETIMEDOUT, errno.EAGAIN}:
-        if mode == "flat" and row in {4, 5}:
+        if mode == "flat" and row in _FLAT_HOST_TIMEOUT_ROWS:
             return "host-refused"
         return "refused"
     if code:
@@ -111,8 +151,28 @@ def classify_verdict(
     return "error"
 
 
+def leak_kind(mode: str, row: int, verdict: str, *, dns_allowed: bool = False) -> str:
+    """Classify an unexpected full-mode success.
+
+    CoreDNS / API-name resolution of a non-matchName name is a
+    name-resolution leak, not a reach leak. Direct-IP to a declared pod
+    (row 1) is identity match and is not a leak.
+    """
+    if mode != "full":
+        return ""
+    if row == 1:
+        return ""
+    if row in {3, 7} and (verdict == "allowed" or dns_allowed):
+        if verdict == "allowed" and row == 7 and not dns_allowed:
+            return "reach"
+        return "name-resolution"
+    if verdict == "allowed":
+        return "reach"
+    return ""
+
+
 def matrix_from_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    """Fold evasion.parquet into the 7-row result.json matrix."""
+    """Fold evasion.parquet into the 9-row result.json matrix."""
     if frame.empty:
         return []
     out: list[dict[str, Any]] = []
@@ -121,16 +181,28 @@ def matrix_from_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
         if hit.empty:
             continue
         rec = hit.iloc[0]
-        out.append(
-            {
-                "row": int(spec["row"]),
-                "probe": str(rec.get("probe") or spec["probe"]),
-                "target": str(rec.get("target") or ""),
-                "verdict": str(rec.get("verdict") or "error"),
-                "latency_ms": float(rec.get("latency_ms") or 0.0),
-                "detail": str(rec.get("detail") or ""),
-            }
-        )
+        item: dict[str, Any] = {
+            "row": int(spec["row"]),
+            "id": str(rec["id"]) if "id" in rec.index and rec.get("id") else spec["id"],
+            "probe": str(rec.get("probe") or spec["probe"]),
+            "target": str(rec.get("target") or ""),
+            "verdict": str(rec.get("verdict") or "error"),
+            "latency_ms": float(rec.get("latency_ms") or 0.0),
+            "detail": str(rec.get("detail") or ""),
+        }
+        for key in _OPTIONAL_FIELDS:
+            if key == "id":
+                continue
+            if key not in rec.index:
+                continue
+            val = rec.get(key)
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                continue
+            if key == "leak":
+                item[key] = str(val)
+            else:
+                item[key] = float(val)
+        out.append(item)
     return out
 
 
@@ -301,189 +373,195 @@ print(json.dumps(out))
 """
 
 
-def _combine_dns(coredns: dict[str, Any], udp: dict[str, Any], mode: str) -> tuple[str, float, str]:
-    """Row 3 verdict is the CoreDNS undeclared lookup (acceptance signal).
-
-    External UDP/53 is recorded in detail. Combined latency is the sum.
-    """
-    v_dns = classify_verdict(
-        ok=bool(coredns.get("ok")),
-        err=coredns.get("errno"),
-        mode=mode,
-        row=3,
-        timed_out=bool(coredns.get("timed_out")),
-    )
-    v_udp = classify_verdict(
-        ok=bool(udp.get("ok")),
-        err=udp.get("errno"),
-        mode=mode,
-        row=3,
-        timed_out=bool(udp.get("timed_out")),
-    )
-    latency = float(coredns.get("latency_ms") or 0.0) + float(udp.get("latency_ms") or 0.0)
-    detail = (
-        f"coredns_undeclared={v_dns} ips={coredns.get('ips') or []}; "
-        f"udp53_{EXTERNAL_RESOLVER_IP}={v_udp}"
-    )
-    return v_dns, latency, detail
-
-
-def _combine_k8s(
-    name_dns: dict[str, Any],
-    name_tcp: dict[str, Any],
-    ip_tcp: dict[str, Any],
-    mode: str,
-) -> tuple[str, float, str]:
-    """Row 6: allowed if any path connected; refused if none did."""
-    parts = []
-    verdicts = []
-    latency = 0.0
-    v_dns = classify_verdict(
-        ok=bool(name_dns.get("ok")),
-        err=name_dns.get("errno"),
-        mode=mode,
-        row=6,
-        timed_out=bool(name_dns.get("timed_out")),
-    )
-    parts.append(f"dns={v_dns}")
-    latency += float(name_dns.get("latency_ms") or 0.0)
-    for label, att in (
-        ("tcp_name", name_tcp),
-        ("tcp_clusterip", ip_tcp),
-    ):
-        if att.get("skipped"):
-            parts.append(f"{label}=skipped")
-            continue
-        v = classify_verdict(
-            ok=bool(att.get("ok")),
-            err=att.get("errno"),
-            mode=mode,
-            row=6,
-            timed_out=bool(att.get("timed_out")),
-        )
-        verdicts.append(v)
-        latency += float(att.get("latency_ms") or 0.0)
-        parts.append(f"{label}={v}")
-    if any(v == "allowed" for v in verdicts):
-        verdict = "allowed"
-    elif verdicts and all(v == "refused" for v in verdicts):
-        verdict = "refused"
-    elif verdicts and all(v == "host-refused" for v in verdicts):
-        verdict = "host-refused"
-    elif verdicts and all(v in {"refused", "host-refused"} for v in verdicts):
-        verdict = "refused" if mode == "full" else "host-refused"
-    else:
-        verdict = "error"
-    return verdict, latency, "; ".join(parts)
+def _stamp(
+    row: dict[str, Any],
+    *,
+    policy_propagation_ms: float | None,
+    cnp_valid_epoch: float | None,
+    probe_epoch: float | None,
+) -> dict[str, Any]:
+    if policy_propagation_ms is not None:
+        row["policy_propagation_ms"] = float(policy_propagation_ms)
+    if probe_epoch is not None:
+        row["probe_epoch"] = float(probe_epoch)
+    if cnp_valid_epoch is not None:
+        row["cnp_valid_epoch"] = float(cnp_valid_epoch)
+        if probe_epoch is not None:
+            row["seconds_after_cnp_valid"] = max(
+                0.0, float(probe_epoch) - float(cnp_valid_epoch)
+            )
+    return row
 
 
 def assemble_rows(
     attempts: dict[str, Any],
     targets: dict[str, Any],
     mode: str,
+    *,
+    policy_propagation_ms: float | None = None,
+    cnp_valid_epoch: float | None = None,
+    probe_epoch: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Build the seven matrix rows from in-pod attempt dicts."""
+    """Build the nine matrix rows from in-pod attempt dicts."""
     rows: list[dict[str, Any]] = []
+    stamp_kw = {
+        "policy_propagation_ms": policy_propagation_ms,
+        "cnp_valid_epoch": cnp_valid_epoch,
+        "probe_epoch": probe_epoch,
+    }
+
+    def add(spec_row: int, **fields: Any) -> None:
+        spec = next(s for s in PROBE_SPECS if s["row"] == spec_row)
+        item = {
+            "row": spec_row,
+            "id": spec["id"],
+            "probe": spec["probe"],
+            **fields,
+        }
+        if "leak" not in item:
+            item["leak"] = leak_kind(mode, spec_row, str(item.get("verdict") or ""))
+        rows.append(_stamp(item, **stamp_kw))
 
     d1 = attempts["direct_declared"]
-    rows.append(
-        {
-            "row": 1,
-            "probe": "direct_ip_declared",
-            "target": f"{targets['declared_pod_ip']}:{targets['declared_port']} ({targets['declared_name']} pod)",
-            "verdict": classify_verdict(
-                ok=bool(d1.get("ok")), err=d1.get("errno"), mode=mode, row=1,
-                timed_out=bool(d1.get("timed_out")),
-            ),
-            "latency_ms": float(d1.get("latency_ms") or 0.0),
-            "detail": f"bypass Service name; connect to pod IP of {targets['declared_name']}",
-        }
+    add(
+        1,
+        target=f"{targets['declared_pod_ip']}:{targets['declared_port']} ({targets['declared_name']} pod)",
+        verdict=classify_verdict(
+            ok=bool(d1.get("ok")), err=d1.get("errno"), mode=mode, row=1,
+            timed_out=bool(d1.get("timed_out")),
+        ),
+        latency_ms=float(d1.get("latency_ms") or 0.0),
+        detail=f"bypass Service name; connect to pod IP of {targets['declared_name']}",
     )
 
     d2 = attempts["direct_undeclared"]
-    rows.append(
-        {
-            "row": 2,
-            "probe": "direct_ip_undeclared",
-            "target": f"{targets['undeclared_pod_ip']}:{targets['undeclared_port']} ({targets['undeclared_name']} pod)",
-            "verdict": classify_verdict(
-                ok=bool(d2.get("ok")), err=d2.get("errno"), mode=mode, row=2,
-                timed_out=bool(d2.get("timed_out")),
-            ),
-            "latency_ms": float(d2.get("latency_ms") or 0.0),
-            "detail": f"pod IP of undeclared {targets['undeclared_name']}",
-        }
+    add(
+        2,
+        target=f"{targets['undeclared_pod_ip']}:{targets['undeclared_port']} ({targets['undeclared_name']} pod)",
+        verdict=classify_verdict(
+            ok=bool(d2.get("ok")), err=d2.get("errno"), mode=mode, row=2,
+            timed_out=bool(d2.get("timed_out")),
+        ),
+        latency_ms=float(d2.get("latency_ms") or 0.0),
+        detail=f"pod IP of undeclared {targets['undeclared_name']}",
     )
 
-    v3, lat3, det3 = _combine_dns(attempts["dns_coredns"], attempts["dns_udp53"], mode)
-    rows.append(
-        {
-            "row": 3,
-            "probe": "dns",
-            "target": f"{targets['undeclared_dns']}; udp/53@{targets['external_resolver_ip']}",
-            "verdict": v3,
-            "latency_ms": lat3,
-            "detail": det3,
-        }
+    coredns = attempts["dns_coredns"]
+    v3 = classify_verdict(
+        ok=bool(coredns.get("ok")),
+        err=coredns.get("errno"),
+        mode=mode,
+        row=3,
+        timed_out=bool(coredns.get("timed_out")),
+    )
+    add(
+        3,
+        target=str(targets["undeclared_dns"]),
+        verdict=v3,
+        latency_ms=float(coredns.get("latency_ms") or 0.0),
+        detail=f"coredns_undeclared={v3} ips={coredns.get('ips') or []}",
+        leak=leak_kind(mode, 3, v3),
     )
 
-    d4 = attempts["external_https"]
-    rows.append(
-        {
-            "row": 4,
-            "probe": "external_https",
-            "target": f"{targets['external_https_ip']}:{targets['external_https_port']}",
-            "verdict": classify_verdict(
-                ok=bool(d4.get("ok")), err=d4.get("errno"), mode=mode, row=4,
-                timed_out=bool(d4.get("timed_out")),
-            ),
-            "latency_ms": float(d4.get("latency_ms") or 0.0),
-            "detail": "documented public IP Cloudflare 1.1.1.1 TCP/443",
-        }
+    udp = attempts["dns_udp53"]
+    v4 = classify_verdict(
+        ok=bool(udp.get("ok")),
+        err=udp.get("errno"),
+        mode=mode,
+        row=4,
+        timed_out=bool(udp.get("timed_out")),
+    )
+    add(
+        4,
+        target=f"udp/53@{targets['external_resolver_ip']}",
+        verdict=v4,
+        latency_ms=float(udp.get("latency_ms") or 0.0),
+        detail=f"udp53_{EXTERNAL_RESOLVER_IP}={v4}",
     )
 
-    d5 = attempts["metadata"]
-    rows.append(
-        {
-            "row": 5,
-            "probe": "node_metadata",
-            "target": f"{targets['metadata_ip']}:{targets['metadata_port']}",
-            "verdict": classify_verdict(
-                ok=bool(d5.get("ok")), err=d5.get("errno"), mode=mode, row=5,
-                timed_out=bool(d5.get("timed_out")),
-            ),
-            "latency_ms": float(d5.get("latency_ms") or 0.0),
-            "detail": "link-local cloud metadata; k3d has no IMDS",
-        }
+    d5 = attempts["external_https"]
+    add(
+        5,
+        target=f"{targets['external_https_ip']}:{targets['external_https_port']}",
+        verdict=classify_verdict(
+            ok=bool(d5.get("ok")), err=d5.get("errno"), mode=mode, row=5,
+            timed_out=bool(d5.get("timed_out")),
+        ),
+        latency_ms=float(d5.get("latency_ms") or 0.0),
+        detail="documented public IP Cloudflare 1.1.1.1 TCP/443",
     )
 
-    v6, lat6, det6 = _combine_k8s(
-        attempts["k8s_dns"], attempts["k8s_tcp_name"], attempts["k8s_tcp_ip"], mode
-    )
-    rows.append(
-        {
-            "row": 6,
-            "probe": "kubernetes_api",
-            "target": f"{targets['kubernetes_dns']}:{targets['kubernetes_port']}+{targets['kubernetes_ip']}",
-            "verdict": v6,
-            "latency_ms": lat6,
-            "detail": det6,
-        }
+    d6 = attempts["metadata"]
+    add(
+        6,
+        target=f"{targets['metadata_ip']}:{targets['metadata_port']}",
+        verdict=classify_verdict(
+            ok=bool(d6.get("ok")), err=d6.get("errno"), mode=mode, row=6,
+            timed_out=bool(d6.get("timed_out")),
+        ),
+        latency_ms=float(d6.get("latency_ms") or 0.0),
+        detail="link-local cloud metadata; k3d has no IMDS",
     )
 
-    d7 = attempts["kubelet"]
-    rows.append(
-        {
-            "row": 7,
-            "probe": "kubelet",
-            "target": f"{targets['node_ip']}:{targets['kubelet_port']}",
-            "verdict": classify_verdict(
-                ok=bool(d7.get("ok")), err=d7.get("errno"), mode=mode, row=7,
-                timed_out=bool(d7.get("timed_out")),
-            ),
-            "latency_ms": float(d7.get("latency_ms") or 0.0),
-            "detail": "node InternalIP kubelet",
-        }
+    name_dns = attempts["k8s_dns"]
+    name_tcp = attempts["k8s_tcp_name"]
+    v_dns = classify_verdict(
+        ok=bool(name_dns.get("ok")),
+        err=name_dns.get("errno"),
+        mode=mode,
+        row=7,
+        timed_out=bool(name_dns.get("timed_out")),
+    )
+    dns_allowed = v_dns == "allowed"
+    if name_tcp.get("skipped"):
+        v7 = v_dns
+        lat7 = float(name_dns.get("latency_ms") or 0.0)
+        det7 = f"dns={v_dns}; tcp_name=skipped"
+    else:
+        v7 = classify_verdict(
+            ok=bool(name_tcp.get("ok")),
+            err=name_tcp.get("errno"),
+            mode=mode,
+            row=7,
+            timed_out=bool(name_tcp.get("timed_out")),
+        )
+        lat7 = float(name_dns.get("latency_ms") or 0.0) + float(name_tcp.get("latency_ms") or 0.0)
+        det7 = f"dns={v_dns}; tcp_name={v7}"
+    add(
+        7,
+        target=f"{targets['kubernetes_dns']}:{targets['kubernetes_port']}",
+        verdict=v7,
+        latency_ms=lat7,
+        detail=det7,
+        leak=leak_kind(mode, 7, v7, dns_allowed=dns_allowed),
+    )
+
+    ip_tcp = attempts["k8s_tcp_ip"]
+    v8 = classify_verdict(
+        ok=bool(ip_tcp.get("ok")),
+        err=ip_tcp.get("errno"),
+        mode=mode,
+        row=8,
+        timed_out=bool(ip_tcp.get("timed_out")),
+    )
+    add(
+        8,
+        target=f"{targets['kubernetes_ip']}:{targets['kubernetes_port']}",
+        verdict=v8,
+        latency_ms=float(ip_tcp.get("latency_ms") or 0.0),
+        detail=f"tcp_clusterip={v8}",
+    )
+
+    d9 = attempts["kubelet"]
+    add(
+        9,
+        target=f"{targets['node_ip']}:{targets['kubelet_port']}",
+        verdict=classify_verdict(
+            ok=bool(d9.get("ok")), err=d9.get("errno"), mode=mode, row=9,
+            timed_out=bool(d9.get("timed_out")),
+        ),
+        latency_ms=float(d9.get("latency_ms") or 0.0),
+        detail="node InternalIP kubelet",
     )
     return rows
 
@@ -497,13 +575,18 @@ def run_evasion(
     timeout: float = 2.0,
     declared: str = "records",
     undeclared: str = "docs",
+    policy_propagation_ms: float | None = None,
+    cnp_valid_epoch: float | None = None,
+    probe_epoch: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Discover targets on the host, probe from ``pod``, return 7 rows."""
+    """Discover targets on the host, probe from ``pod``, return 9 rows."""
     targets = discover_targets(
         kubectl, namespace=namespace, declared=declared, undeclared=undeclared
     )
     script = _inpod_source(targets, timeout)
     t0 = time.time()
+    if probe_epoch is None:
+        probe_epoch = t0
     proc = kubectl(
         "-n", namespace, "exec", "-i", pod, "--", "python", "-",
         input_text=script,
@@ -516,4 +599,11 @@ def run_evasion(
             f"{getattr(proc, 'stderr', '')}"
         )
     attempts = json.loads(text[-1])
-    return assemble_rows(attempts, targets, mode)
+    return assemble_rows(
+        attempts,
+        targets,
+        mode,
+        policy_propagation_ms=policy_propagation_ms,
+        cnp_valid_epoch=cnp_valid_epoch,
+        probe_epoch=probe_epoch,
+    )

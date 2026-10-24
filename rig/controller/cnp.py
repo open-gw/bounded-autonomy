@@ -200,7 +200,8 @@ def render_cnp(
             "enableDefaultDeny": {"egress": True},
             "egress": egress,
             # reserved:host / kube-apiserver are not covered by default-deny
-            # alone on this datapath; rows 6–7 need an explicit deny.
+            # alone on this datapath; API ClusterIP and kubelet rows need an
+            # explicit deny (display rows 6a/6b and 7).
             "egressDeny": [
                 {
                     "toEntities": [
